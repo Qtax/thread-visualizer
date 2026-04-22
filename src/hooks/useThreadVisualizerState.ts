@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import {
+	createCleanThreads,
 	loadSavedStates,
 	loadThreads,
 	normalizeThreads,
@@ -20,6 +21,7 @@ type UseThreadVisualizerStateResult = {
 	isStatePanelOpen: boolean;
 	loadSavedState: (saveId: string) => void;
 	moveThread: (threadId: string, nextIndex: number) => void;
+	newCleanState: () => void;
 	openImportPicker: () => void;
 	saveActionLabel: string;
 	saveCurrentState: () => void;
@@ -130,6 +132,11 @@ export function useThreadVisualizerState(): UseThreadVisualizerStateResult {
 			next.splice(insertionIndex, 0, thread);
 			return next;
 		});
+	}, []);
+
+	const newCleanState = useCallback(() => {
+		setThreads(createCleanThreads());
+		setSaveName("");
 	}, []);
 
 	const showState = useCallback(() => {
@@ -300,6 +307,7 @@ export function useThreadVisualizerState(): UseThreadVisualizerStateResult {
 		isStatePanelOpen,
 		loadSavedState,
 		moveThread,
+		newCleanState,
 		openImportPicker,
 		saveActionLabel,
 		saveCurrentState,

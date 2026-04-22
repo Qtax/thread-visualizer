@@ -50,6 +50,7 @@ type ThreadToolbarProps = {
 	saveActionLabel: string;
 	isStatePanelOpen: boolean;
 	onImportState: (event: ChangeEvent<HTMLInputElement>) => void;
+	onNewCleanState: () => void;
 	onSaveNameChange: (nextValue: string) => void;
 	onSaveCurrentState: () => void;
 	onToggleState: () => void;
@@ -62,6 +63,7 @@ export function ThreadToolbar({
 	saveActionLabel,
 	isStatePanelOpen,
 	onImportState,
+	onNewCleanState,
 	onSaveNameChange,
 	onSaveCurrentState,
 	onToggleState,
@@ -94,6 +96,10 @@ export function ThreadToolbar({
 
 				<ControlButton type="button" onClick={onSaveCurrentState}>
 					{saveActionLabel}
+				</ControlButton>
+
+				<ControlButton type="button" onClick={onNewCleanState} title="New clean state">
+					New state
 				</ControlButton>
 
 				<ControlButton type="button" onClick={onToggleState}>

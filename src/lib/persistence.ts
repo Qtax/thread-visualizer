@@ -3,6 +3,21 @@ import type { SavedState, Thread } from "./thread-visualizer-types";
 export const STORAGE_KEY = "thread-call-path-visualizer-state-v2";
 export const SAVES_STORAGE_KEY = "thread-call-path-visualizer-saves-v1";
 
+export function createCleanThreads(): Thread[] {
+	return [
+		{
+			id: crypto.randomUUID(),
+			name: "Thread A",
+			code: "",
+		},
+		{
+			id: crypto.randomUUID(),
+			name: "Thread B",
+			code: "",
+		},
+	];
+}
+
 function createInitialThreads(): Thread[] {
 	return [
 		{

@@ -65,6 +65,7 @@ export default function ThreadCallPathVisualizer() {
 		isStatePanelOpen,
 		loadSavedState,
 		moveThread,
+		newCleanState,
 		openImportPicker,
 		saveActionLabel,
 		saveCurrentState,
@@ -98,6 +99,7 @@ export default function ThreadCallPathVisualizer() {
 					saveActionLabel={saveActionLabel}
 					isStatePanelOpen={isStatePanelOpen}
 					onImportState={importState}
+					onNewCleanState={newCleanState}
 					onSaveNameChange={setSaveName}
 					onSaveCurrentState={saveCurrentState}
 					onToggleState={showState}
