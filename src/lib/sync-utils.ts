@@ -256,6 +256,36 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 
 		return left.localeCompare(right);
 	};
+	const buildFallbackOrder = (ids: string[]): string[] => {
+		const visited = new Set<string>();
+		const visiting = new Set<string>();
+		const postOrder: string[] = [];
+		const sortedIds = [...ids].sort(compareSyncIds);
+
+		const visit = (syncId: string) => {
+			if (visited.has(syncId)) {
+				return;
+			}
+			if (visiting.has(syncId)) {
+				return;
+			}
+
+			visiting.add(syncId);
+			const outgoing = edges.get(syncId);
+			if (outgoing) {
+				[...outgoing]
+					.filter((targetId) => ids.includes(targetId))
+					.sort(compareSyncIds)
+					.forEach(visit);
+			}
+			visiting.delete(syncId);
+			visited.add(syncId);
+			postOrder.push(syncId);
+		};
+
+		sortedIds.forEach(visit);
+		return postOrder.reverse();
+	};
 
 	const ready = [...matchedIds]
 		.filter((syncId) => (indegree.get(syncId) ?? 0) === 0)
@@ -282,9 +312,9 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 	}
 
 	if (orderedIds.length !== matchedIds.size) {
-		const remainingIds = [...matchedIds]
-			.filter((syncId) => !orderedIds.includes(syncId))
-			.sort(compareSyncIds);
+		const remainingIds = buildFallbackOrder(
+			[...matchedIds].filter((syncId) => !orderedIds.includes(syncId))
+		);
 		orderedIds.push(...remainingIds);
 	}
 
