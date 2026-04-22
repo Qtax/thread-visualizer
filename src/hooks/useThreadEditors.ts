@@ -17,8 +17,12 @@ import {
 } from "../lib/sync-utils";
 import type { ConnectorOverlay, ConnectorPath, Thread } from "../lib/thread-visualizer-types";
 
-const LINE_HEIGHT = 22;
 const MIN_EDITOR_HEIGHT = 180;
+const DEFAULT_EDITOR_FONT_SIZE = 14;
+const DEFAULT_EDITOR_LINE_HEIGHT = 22;
+const COMPACT_EDITOR_FONT_SIZE = 12;
+const COMPACT_EDITOR_LINE_HEIGHT = 19;
+const COMPACT_EDITOR_WIDTH_THRESHOLD = 600;
 
 type ConnectorEndpoint = {
 	threadId: string;
@@ -63,6 +67,16 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 		MIN_EDITOR_HEIGHT,
 		...Object.values(contentHeights).filter((value) => Number.isFinite(value))
 	);
+
+	const syncEditorFontSize = useCallback((editor: Monaco.editor.IStandaloneCodeEditor) => {
+		const layoutInfo = editor.getLayoutInfo();
+		const useCompactTypography =
+			layoutInfo.width < COMPACT_EDITOR_WIDTH_THRESHOLD
+				? { fontSize: COMPACT_EDITOR_FONT_SIZE, lineHeight: COMPACT_EDITOR_LINE_HEIGHT }
+				: { fontSize: DEFAULT_EDITOR_FONT_SIZE, lineHeight: DEFAULT_EDITOR_LINE_HEIGHT };
+
+		editor.updateOptions(useCompactTypography);
+	}, []);
 
 	const syncEditorHeight = useCallback((threadId: string) => {
 		const editor = editorsRef.current[threadId];
@@ -364,13 +378,15 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 				editorsRef.current[threadId] = editor;
 
 				editor.updateOptions({
-					lineHeight: LINE_HEIGHT,
-					fontSize: 14,
+					lineHeight: DEFAULT_EDITOR_LINE_HEIGHT,
+					fontSize: DEFAULT_EDITOR_FONT_SIZE,
 					fontFamily:
 						"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
 					tabSize: 4,
 					insertSpaces: false,
 				});
+
+				syncEditorFontSize(editor);
 
 				editor.onDidContentSizeChange(() => {
 					syncEditorHeight(threadId);
@@ -380,6 +396,7 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 				});
 
 				editor.onDidLayoutChange(() => {
+					syncEditorFontSize(editor);
 					if (!isApplyingZonesRef.current) {
 						requestAnimationFrame(() => applyViewZonesRef.current());
 					}
@@ -429,7 +446,7 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 				);
 				applyViewZones();
 			},
-		[applySyncDecorations, applyViewZones, syncEditorHeight, threads]
+		[applySyncDecorations, applyViewZones, syncEditorFontSize, syncEditorHeight, threads]
 	);
 
 	return {
