@@ -28,7 +28,7 @@
 	},
 	"[markdown]": {
 		"editor.insertSpaces": false,
-		"editor.defaultFormatter": "esbenp.prettier-vscode"
+		"editor.formatOnSave": false
 	},
 	"[json]": {
 		"editor.insertSpaces": false,
