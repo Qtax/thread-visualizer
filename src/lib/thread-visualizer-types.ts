@@ -22,6 +22,12 @@ export type SyncMarker = {
 	lineNumber: number;
 };
 
+export type SyncGroupOccurrence = {
+	threadId: string;
+	lineNumber: number;
+	kind: SyncTagKind;
+};
+
 export type Point = {
 	x: number;
 	y: number;
@@ -49,4 +55,8 @@ export type SavedState = {
 };
 
 export type ZonePlan = Record<string, Record<number, number>>;
-export type SyncGroup = [string, Array<{ threadId: string; lineNumber: number }>];
+export type SyncGroup = {
+	id: string;
+	strategy: "align-all" | "align-waits-to-first-set";
+	occurrences: SyncGroupOccurrence[];
+};

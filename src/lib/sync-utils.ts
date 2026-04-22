@@ -2,6 +2,7 @@ import type * as Monaco from "monaco-editor";
 
 import type {
 	SyncGroup,
+	SyncGroupOccurrence,
 	SyncLineDecoration,
 	SyncMarker,
 	SyncOccurrence,
@@ -88,7 +89,7 @@ export function collectSyncLineDecorations(text: string): SyncLineDecoration[] {
 }
 
 export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
-	const grouped = new Map<string, Array<{ threadId: string; lineNumber: number }>>();
+	const grouped = new Map<string, SyncGroupOccurrence[]>();
 	const perThreadSequences: Array<Array<{ id: string; lineNumber: number }>> = [];
 	const lineStats = new Map<string, { min: number; sum: number; count: number }>();
 
@@ -96,12 +97,24 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 		const syncs = parseFirstSyncs(thread.code);
 		perThreadSequences.push(syncs.map(({ id, lineNumber }) => ({ id, lineNumber })));
 
-		for (const sync of syncs) {
-			if (!grouped.has(sync.id)) {
-				grouped.set(sync.id, []);
-			}
-			grouped.get(sync.id)!.push({ threadId: thread.id, lineNumber: sync.lineNumber });
+		const markers = collectSyncMarkers(thread.code);
+		const seenSyncIds = new Set<string>();
 
+		markers.forEach(({ id, kind, lineNumber }) => {
+			if (kind === "sync") {
+				if (seenSyncIds.has(id)) {
+					return;
+				}
+
+				seenSyncIds.add(id);
+			}
+
+			const occurrences = grouped.get(id) ?? [];
+			occurrences.push({ threadId: thread.id, lineNumber, kind });
+			grouped.set(id, occurrences);
+		});
+
+		for (const sync of syncs) {
 			const currentStats = lineStats.get(sync.id);
 			if (!currentStats) {
 				lineStats.set(sync.id, { min: sync.lineNumber, sum: sync.lineNumber, count: 1 });
@@ -113,11 +126,48 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 		}
 	}
 
-	const matchedIds = new Set(
-		[...grouped.entries()]
-			.filter(([, occurrences]) => occurrences.length > 1)
-			.map(([syncId]) => syncId)
-	);
+	const candidateGroups = new Map<string, SyncGroup>();
+
+	grouped.forEach((occurrences, id) => {
+		const syncOccurrences = occurrences.filter((occurrence) => occurrence.kind === "sync");
+		if (syncOccurrences.length > 0) {
+			if (syncOccurrences.length > 1) {
+				candidateGroups.set(id, {
+					id,
+					strategy: "align-all",
+					occurrences: syncOccurrences,
+				});
+			}
+
+			return;
+		}
+
+		const waitOccurrences = occurrences.filter((occurrence) => occurrence.kind === "wait");
+		const setOccurrences = occurrences.filter((occurrence) => occurrence.kind === "set");
+
+		if (waitOccurrences.length === 0) {
+			return;
+		}
+
+		if (setOccurrences.length > 0) {
+			candidateGroups.set(id, {
+				id,
+				strategy: "align-waits-to-first-set",
+				occurrences: [...setOccurrences, ...waitOccurrences],
+			});
+			return;
+		}
+
+		if (waitOccurrences.length > 1) {
+			candidateGroups.set(id, {
+				id,
+				strategy: "align-all",
+				occurrences: waitOccurrences,
+			});
+		}
+	});
+
+	const matchedIds = new Set([...candidateGroups.keys()]);
 
 	const edges = new Map<string, Set<string>>();
 	const indegree = new Map<string, number>();
@@ -198,7 +248,9 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 		orderedIds.push(...remainingIds);
 	}
 
-	return orderedIds.map((syncId) => [syncId, grouped.get(syncId) ?? []]);
+	return orderedIds
+		.map((syncId) => candidateGroups.get(syncId))
+		.filter((group): group is SyncGroup => group !== undefined);
 }
 
 function getAccumulatedOffset(beforeByLine: Record<number, number>, lineNumber: number): number {
@@ -220,31 +272,98 @@ export function computeAlignmentPlanFromBaseTops(
 ): ZonePlan {
 	const threadIds = Object.keys(baseTops);
 	const plan: ZonePlan = Object.fromEntries(threadIds.map((threadId) => [threadId, {}]));
+	const getCurrentTop = ({ threadId, lineNumber }: SyncGroupOccurrence) => {
+		const baseTop = baseTops[threadId]?.[lineNumber];
+		if (baseTop === undefined) {
+			return undefined;
+		}
 
-	groups.forEach(([, occurrences]) => {
-		const measurable = occurrences.filter(
-			(occurrence) => baseTops[occurrence.threadId]?.[occurrence.lineNumber] !== undefined
-		);
+		return baseTop + getAccumulatedOffset(plan[threadId], lineNumber);
+	};
+	const applyAlignment = (occurrences: SyncGroupOccurrence[]) => {
+		const measurable = occurrences
+			.map((occurrence) => ({
+				occurrence,
+				top: getCurrentTop(occurrence),
+			}))
+			.filter(
+				(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
+					entry.top !== undefined
+			);
 
 		if (measurable.length < 2) {
 			return;
 		}
 
-		const tops = measurable.map(({ threadId, lineNumber }) => {
-			const baseTop = baseTops[threadId][lineNumber];
-			const offset = getAccumulatedOffset(plan[threadId], lineNumber);
-			return baseTop + offset;
-		});
+		const targetTop = Math.max(...measurable.map((entry) => entry.top));
 
-		const targetTop = Math.max(...tops);
-
-		measurable.forEach(({ threadId, lineNumber }, index) => {
-			const delta = targetTop - tops[index];
+		measurable.forEach(({ occurrence, top }) => {
+			const delta = targetTop - top;
 			if (delta <= 0.5) {
 				return;
 			}
 
-			plan[threadId][lineNumber] = (plan[threadId][lineNumber] ?? 0) + delta;
+			plan[occurrence.threadId][occurrence.lineNumber] =
+				(plan[occurrence.threadId][occurrence.lineNumber] ?? 0) + delta;
+		});
+	};
+
+	groups.forEach((group) => {
+		if (group.strategy === "align-all") {
+			applyAlignment(group.occurrences);
+			return;
+		}
+
+		const waitOccurrences = group.occurrences.filter(
+			(occurrence) => occurrence.kind === "wait"
+		);
+		if (waitOccurrences.length === 0) {
+			return;
+		}
+
+		const measurableWaits = waitOccurrences
+			.map((occurrence) => ({
+				occurrence,
+				top: getCurrentTop(occurrence),
+			}))
+			.filter(
+				(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
+					entry.top !== undefined
+			);
+
+		if (measurableWaits.length === 0) {
+			return;
+		}
+
+		const measurableSets = group.occurrences
+			.filter((occurrence) => occurrence.kind === "set")
+			.map((occurrence) => ({
+				occurrence,
+				top: getCurrentTop(occurrence),
+			}))
+			.filter(
+				(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
+					entry.top !== undefined
+			);
+
+		if (measurableSets.length === 0) {
+			applyAlignment(waitOccurrences);
+			return;
+		}
+
+		const anchorSet = measurableSets.reduce((best, current) =>
+			current.top < best.top ? current : best
+		);
+		const targetTop = Math.max(anchorSet.top, ...measurableWaits.map((entry) => entry.top));
+
+		measurableWaits.forEach(({ occurrence, top }) => {
+			const delta = targetTop - top;
+			if (delta <= 0.5) {
+				return;
+			}
+
+			plan[occurrence.threadId][occurrence.lineNumber] =
+				(plan[occurrence.threadId][occurrence.lineNumber] ?? 0) + delta;
 		});
 	});
 

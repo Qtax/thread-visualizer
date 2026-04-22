@@ -164,32 +164,37 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 		[...groups.entries()]
 			.sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
 			.forEach(([id, group]) => {
-				group.set.forEach((source, sourceIndex) => {
-					group.wait.forEach((target, targetIndex) => {
-						if (
-							source.threadId === target.threadId &&
-							source.lineNumber === target.lineNumber
-						) {
-							return;
-						}
+				const anchorSource = group.set.reduce((best, current) =>
+					current.y < best.y ||
+					(current.y === best.y && current.lineNumber < best.lineNumber)
+						? current
+						: best
+				);
 
-						const targetIsRight = target.centerX >= source.centerX;
-						const start = {
-							x: targetIsRight ? source.rightX : source.leftX,
-							y: source.y,
-						};
-						const end = {
-							x: targetIsRight ? target.leftX : target.rightX,
-							y: target.y,
-						};
-						const geometry = buildConnectorGeometry(start, end);
+				group.wait.forEach((target, targetIndex) => {
+					if (
+						anchorSource.threadId === target.threadId &&
+						anchorSource.lineNumber === target.lineNumber
+					) {
+						return;
+					}
 
-						connectors.push({
-							id,
-							key: `${id}:${sourceIndex}:${targetIndex}:${source.threadId}:${source.lineNumber}:${target.threadId}:${target.lineNumber}`,
-							path: geometry.path,
-							arrowPath: geometry.arrowPath,
-						});
+					const targetIsRight = target.centerX >= anchorSource.centerX;
+					const start = {
+						x: targetIsRight ? anchorSource.rightX : anchorSource.leftX,
+						y: anchorSource.y,
+					};
+					const end = {
+						x: targetIsRight ? target.leftX : target.rightX,
+						y: target.y,
+					};
+					const geometry = buildConnectorGeometry(start, end);
+
+					connectors.push({
+						id,
+						key: `${id}:anchor:${anchorSource.threadId}:${anchorSource.lineNumber}:${targetIndex}:${target.threadId}:${target.lineNumber}`,
+						path: geometry.path,
+						arrowPath: geometry.arrowPath,
 					});
 				});
 			});
@@ -232,8 +237,8 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 		if (groups.length > 0) {
 			const baseTops: Record<string, Record<number, number>> = {};
 
-			groups.forEach(([, occurrences]) => {
-				occurrences.forEach(({ threadId, lineNumber }) => {
+			groups.forEach((group) => {
+				group.occurrences.forEach(({ threadId, lineNumber }) => {
 					const editor = editorsRef.current[threadId];
 					if (!editor) {
 						return;
