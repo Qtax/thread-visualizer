@@ -39,11 +39,13 @@ const ThreadCanvasViewport = styled.div`
 
 const ThreadCanvas = styled.div`
 	position: relative;
+	width: fit-content;
 	min-width: 100%;
 `;
 
 const ThreadColumns = styled.div`
 	display: grid;
+	width: 100%;
 	min-width: 100%;
 	gap: 0;
 	align-items: stretch;
