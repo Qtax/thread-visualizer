@@ -28,6 +28,14 @@ export type SyncGroupOccurrence = {
 	kind: SyncTagKind;
 };
 
+export type ZonePlacement = "before" | "after";
+
+export type ZoneAdjustment = {
+	height: number;
+	kind: SyncTagKind;
+	placement: ZonePlacement;
+};
+
 export type Point = {
 	x: number;
 	y: number;
@@ -54,7 +62,7 @@ export type SavedState = {
 	threads: Thread[];
 };
 
-export type ZonePlan = Record<string, Record<number, number>>;
+export type ZonePlan = Record<string, Record<number, ZoneAdjustment>>;
 export type SyncGroup = {
 	id: string;
 	strategy: "align-all" | "align-waits-to-first-set";

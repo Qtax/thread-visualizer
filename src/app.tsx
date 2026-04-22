@@ -10,24 +10,31 @@ import { ThreadColumn } from "./components/ThreadColumn";
 import { ThreadTabs } from "./components/ThreadTabs";
 import { ThreadToolbar } from "./components/ThreadToolbar";
 import { useThreadEditors } from "./hooks/useThreadEditors";
+import { SYNC_DECORATION_COLOR_VALUES } from "./lib/sync-decoration-colors";
 import { useThreadVisualizerState } from "./hooks/useThreadVisualizerState";
 import { AppSurface, WorkspaceFrame, globalStyles, palette } from "./styles/ui";
 
 const syncDecorationStyles = css`
+	:global(:root) {
+		--sync-decoration-color-sync: ${SYNC_DECORATION_COLOR_VALUES.sync};
+		--sync-decoration-color-wait: ${SYNC_DECORATION_COLOR_VALUES.wait};
+		--sync-decoration-color-set: ${SYNC_DECORATION_COLOR_VALUES.set};
+	}
+
 	:global(.sync-line-decoration) {
-		--sync-decoration-color: rgb(92, 151, 245);
+		--sync-decoration-color: var(--sync-decoration-color-sync);
 		border-left-width: 2px;
 		border-left-style: solid;
 		border-left-color: color-mix(in srgb, var(--sync-decoration-color) 45%, transparent);
-		background: color-mix(in srgb, var(--sync-decoration-color) 15%, transparent);
+		background: color-mix(in srgb, var(--sync-decoration-color) 10%, transparent);
 	}
 
 	:global(.sync-line-decoration--wait) {
-		--sync-decoration-color: rgb(255, 196, 0);
+		--sync-decoration-color: var(--sync-decoration-color-wait);
 	}
 
 	:global(.sync-line-decoration--set) {
-		--sync-decoration-color: rgb(74, 209, 124);
+		--sync-decoration-color: var(--sync-decoration-color-set);
 	}
 `;
 

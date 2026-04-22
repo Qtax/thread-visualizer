@@ -8,6 +8,7 @@ import type {
 	SyncOccurrence,
 	SyncTagKind,
 	Thread,
+	ZoneAdjustment,
 	ZonePlan,
 } from "./thread-visualizer-types";
 
@@ -253,17 +254,49 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 		.filter((group): group is SyncGroup => group !== undefined);
 }
 
-function getAccumulatedOffset(beforeByLine: Record<number, number>, lineNumber: number): number {
+function getAccumulatedOffset(
+	zoneByLine: Record<number, ZoneAdjustment>,
+	lineNumber: number
+): number {
 	let total = 0;
 
-	for (const [rawLine, rawHeight] of Object.entries(beforeByLine)) {
+	for (const [rawLine, adjustment] of Object.entries(zoneByLine)) {
 		const line = Number(rawLine);
-		if (line < lineNumber) {
-			total += rawHeight;
+		if (line < lineNumber || (line === lineNumber && adjustment.placement === "before")) {
+			total += adjustment.height;
 		}
 	}
 
 	return total;
+}
+
+function mergeZoneAdjustment(
+	current: ZoneAdjustment | undefined,
+	addition: ZoneAdjustment
+): ZoneAdjustment {
+	if (!current) {
+		return addition;
+	}
+
+	if (current.placement === addition.placement && current.kind === addition.kind) {
+		return {
+			...current,
+			height: current.height + addition.height,
+		};
+	}
+
+	return {
+		...current,
+		height: current.height + addition.height,
+	};
+}
+
+function buildZoneAdjustment(kind: SyncTagKind, height: number): ZoneAdjustment {
+	return {
+		height,
+		kind,
+		placement: kind === "wait" ? "after" : "before",
+	};
 }
 
 export function computeAlignmentPlanFromBaseTops(
@@ -278,7 +311,23 @@ export function computeAlignmentPlanFromBaseTops(
 			return undefined;
 		}
 
-		return baseTop + getAccumulatedOffset(plan[threadId], lineNumber);
+		const currentAdjustment = plan[threadId]?.[lineNumber];
+		return (
+			baseTop +
+			getAccumulatedOffset(plan[threadId], lineNumber) +
+			(currentAdjustment?.placement === "after" ? currentAdjustment.height : 0)
+		);
+	};
+	const applyDelta = (occurrence: SyncGroupOccurrence, delta: number) => {
+		if (delta <= 0.5) {
+			return;
+		}
+
+		const threadPlan = plan[occurrence.threadId];
+		threadPlan[occurrence.lineNumber] = mergeZoneAdjustment(
+			threadPlan[occurrence.lineNumber],
+			buildZoneAdjustment(occurrence.kind, delta)
+		);
 	};
 	const applyAlignment = (occurrences: SyncGroupOccurrence[]) => {
 		const measurable = occurrences
@@ -298,13 +347,7 @@ export function computeAlignmentPlanFromBaseTops(
 		const targetTop = Math.max(...measurable.map((entry) => entry.top));
 
 		measurable.forEach(({ occurrence, top }) => {
-			const delta = targetTop - top;
-			if (delta <= 0.5) {
-				return;
-			}
-
-			plan[occurrence.threadId][occurrence.lineNumber] =
-				(plan[occurrence.threadId][occurrence.lineNumber] ?? 0) + delta;
+			applyDelta(occurrence, targetTop - top);
 		});
 	};
 
@@ -357,13 +400,7 @@ export function computeAlignmentPlanFromBaseTops(
 		const targetTop = Math.max(anchorSet.top, ...measurableWaits.map((entry) => entry.top));
 
 		measurableWaits.forEach(({ occurrence, top }) => {
-			const delta = targetTop - top;
-			if (delta <= 0.5) {
-				return;
-			}
-
-			plan[occurrence.threadId][occurrence.lineNumber] =
-				(plan[occurrence.threadId][occurrence.lineNumber] ?? 0) + delta;
+			applyDelta(occurrence, targetTop - top);
 		});
 	});
 
@@ -379,30 +416,35 @@ export function clearViewZones(editor: Monaco.editor.IStandaloneCodeEditor, zone
 export function addViewZone(
 	editor: Monaco.editor.IStandaloneCodeEditor,
 	lineNumber: number,
-	heightInPx: number
+	adjustment: ZoneAdjustment
 ): string {
 	let zoneId = "";
 
 	editor.changeViewZones((accessor) => {
 		zoneId = accessor.addZone({
-			afterLineNumber: Math.max(0, lineNumber - 1),
-			heightInPx,
-			domNode: makeZoneDom(heightInPx),
+			afterLineNumber:
+				adjustment.placement === "after" ? lineNumber : Math.max(0, lineNumber - 1),
+			heightInPx: adjustment.height,
+			domNode: makeZoneDom(adjustment),
 		});
 	});
 
 	return zoneId;
 }
 
-function makeZoneDom(heightInPx: number): HTMLDivElement {
+function makeZoneDom(adjustment: ZoneAdjustment): HTMLDivElement {
 	const node = document.createElement("div");
 	node.style.display = "block";
 	node.style.width = "100%";
-	node.style.height = `${heightInPx}px`;
+	node.style.height = `${adjustment.height}px`;
 	node.style.pointerEvents = "none";
-	node.style.background = "rgba(161, 161, 170, 0.08)";
-	node.style.borderTop = "1px solid rgba(161, 161, 170, 0.1)";
-	node.style.borderBottom = "1px solid rgba(161, 161, 170, 0.1)";
+	if (adjustment.kind === "sync") {
+		node.style.background = "rgba(161, 161, 170, 0.05)";
+	} else {
+		const color = `var(--sync-decoration-color-${adjustment.kind})`;
+		node.style.background = `color-mix(in srgb, ${color} 4%, transparent)`;
+		node.style.borderLeft = `2px solid color-mix(in srgb, ${color} 45%, transparent)`;
+	}
 	node.style.boxSizing = "border-box";
 	return node;
 }

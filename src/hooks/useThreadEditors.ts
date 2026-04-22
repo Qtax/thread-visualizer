@@ -15,7 +15,12 @@ import {
 	computeAlignmentPlanFromBaseTops,
 	getSyncDecorationClassName,
 } from "../lib/sync-utils";
-import type { ConnectorOverlay, ConnectorPath, Thread } from "../lib/thread-visualizer-types";
+import type {
+	ConnectorOverlay,
+	ConnectorPath,
+	Thread,
+	ZonePlan,
+} from "../lib/thread-visualizer-types";
 
 const MIN_EDITOR_HEIGHT = 180;
 const DEFAULT_EDITOR_FONT_SIZE = 14;
@@ -57,6 +62,7 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 	const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
 	const editorsRef = useRef<Record<string, Monaco.editor.IStandaloneCodeEditor | null>>({});
 	const viewZoneIdsRef = useRef<Record<string, string[]>>({});
+	const zonePlanRef = useRef<ZonePlan>({});
 	const decorationCollectionsRef = useRef<
 		Record<string, Monaco.editor.IEditorDecorationsCollection | null>
 	>({});
@@ -158,11 +164,21 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 					return;
 				}
 
+				const zoneAdjustment = zonePlanRef.current[thread.id]?.[lineNumber];
+				const targetYOffset =
+					kind === "wait" && zoneAdjustment?.placement === "after"
+						? zoneAdjustment.height
+						: 0;
 				const entry = {
 					threadId: thread.id,
 					lineNumber,
 					x: centerX,
-					y: editorRect.top - canvasRect.top + linePosition.top + linePosition.height / 2,
+					y:
+						editorRect.top -
+						canvasRect.top +
+						linePosition.top +
+						linePosition.height / 2 +
+						targetYOffset,
 					centerX,
 					leftX,
 					rightX,
@@ -248,6 +264,7 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 		});
 
 		const groups = collectMatchedSyncGroups(threads);
+		zonePlanRef.current = {};
 		if (groups.length > 0) {
 			const baseTops: Record<string, Record<number, number>> = {};
 
@@ -267,6 +284,7 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 			});
 
 			const plan = computeAlignmentPlanFromBaseTops(groups, baseTops);
+			zonePlanRef.current = plan;
 
 			threads.forEach((thread) => {
 				const editor = editorsRef.current[thread.id];
@@ -276,10 +294,10 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 
 				const zoneIds: string[] = [];
 				Object.entries(plan[thread.id] ?? {})
-					.filter(([, height]) => height > 0.5)
+					.filter(([, adjustment]) => adjustment.height > 0.5)
 					.sort((a, b) => Number(a[0]) - Number(b[0]))
-					.forEach(([rawLine, height]) => {
-						zoneIds.push(addViewZone(editor, Number(rawLine), height));
+					.forEach(([rawLine, adjustment]) => {
+						zoneIds.push(addViewZone(editor, Number(rawLine), adjustment));
 					});
 
 				viewZoneIdsRef.current[thread.id] = zoneIds;
