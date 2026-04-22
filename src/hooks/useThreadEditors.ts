@@ -70,6 +70,7 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 	>({});
 	const applyViewZonesRef = useRef<() => void>(() => {});
 	const isApplyingZonesRef = useRef(false);
+	const pendingApplyViewZonesRef = useRef(false);
 
 	const sharedEditorHeight = Math.max(
 		MIN_EDITOR_HEIGHT,
@@ -203,6 +204,10 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 		[...groups.entries()]
 			.sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
 			.forEach(([id, group]) => {
+				if (group.set.length === 0 || group.wait.length === 0) {
+					return;
+				}
+
 				const anchorSource = group.set.reduce((best, current) =>
 					current.y < best.y ||
 					(current.y === best.y && current.lineNumber < best.lineNumber)
@@ -256,9 +261,11 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 
 	const applyViewZones = useCallback(() => {
 		if (isApplyingZonesRef.current) {
+			pendingApplyViewZonesRef.current = true;
 			return;
 		}
 
+		pendingApplyViewZonesRef.current = false;
 		isApplyingZonesRef.current = true;
 
 		threads.forEach((thread) => {
@@ -321,6 +328,10 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 		requestAnimationFrame(() => {
 			updateConnectorOverlay();
 			isApplyingZonesRef.current = false;
+			if (pendingApplyViewZonesRef.current) {
+				pendingApplyViewZonesRef.current = false;
+				applyViewZonesRef.current();
+			}
 		});
 	}, [syncEditorHeight, threads, updateConnectorOverlay]);
 
@@ -432,6 +443,9 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 				editor.onDidChangeModelContent(() => {
 					syncEditorHeight(threadId);
 					applySyncDecorations(threadId, editor.getValue());
+					if (!isApplyingZonesRef.current) {
+						requestAnimationFrame(() => applyViewZonesRef.current());
+					}
 				});
 
 				editor.onKeyDown((event) => {
