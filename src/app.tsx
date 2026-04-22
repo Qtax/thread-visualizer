@@ -36,6 +36,20 @@ const syncDecorationStyles = css`
 	:global(.sync-line-decoration--set) {
 		--sync-decoration-color: var(--sync-decoration-color-set);
 	}
+
+	:global(.monaco-editor .sync-inline-tag) {
+		--sync-decoration-color: var(--sync-decoration-color-sync);
+		color: color-mix(in srgb, var(--sync-decoration-color) 60%, currentColor);
+		opacity: 0.8;
+	}
+
+	:global(.monaco-editor .sync-inline-tag--wait) {
+		--sync-decoration-color: var(--sync-decoration-color-wait);
+	}
+
+	:global(.monaco-editor .sync-inline-tag--set) {
+		--sync-decoration-color: var(--sync-decoration-color-set);
+	}
 `;
 
 const ThreadCanvasViewport = styled.div`

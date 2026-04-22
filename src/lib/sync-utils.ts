@@ -6,6 +6,7 @@ import type {
 	SyncLineDecoration,
 	SyncMarker,
 	SyncOccurrence,
+	SyncTagDecoration,
 	SyncTagKind,
 	Thread,
 	ZoneAdjustment,
@@ -22,6 +23,17 @@ export function getSyncDecorationClassName(kind: SyncTagKind): string {
 			return "sync-line-decoration sync-line-decoration--set";
 		default:
 			return "sync-line-decoration sync-line-decoration--sync";
+	}
+}
+
+export function getSyncInlineTagClassName(kind: SyncTagKind): string {
+	switch (kind) {
+		case "wait":
+			return "sync-inline-tag sync-inline-tag--wait";
+		case "set":
+			return "sync-inline-tag sync-inline-tag--set";
+		default:
+			return "sync-inline-tag sync-inline-tag--sync";
 	}
 }
 
@@ -72,6 +84,33 @@ export function collectSyncMarkers(text: string): SyncMarker[] {
 	});
 
 	return markers;
+}
+
+export function collectSyncTagDecorations(text: string): SyncTagDecoration[] {
+	const lines = text.split(/\r?\n/);
+	const decorations: SyncTagDecoration[] = [];
+
+	lines.forEach((line, index) => {
+		const matcher = new RegExp(SYNC_PATTERN.source, SYNC_PATTERN.flags);
+		let match: RegExpExecArray | null = null;
+
+		while ((match = matcher.exec(line)) !== null) {
+			const fullMatch = match[0];
+			const id = match[2].trim();
+			if (!id) {
+				continue;
+			}
+
+			decorations.push({
+				kind: match[1].toLowerCase() as SyncTagKind,
+				lineNumber: index + 1,
+				startColumn: match.index + 1,
+				endColumn: match.index + fullMatch.length + 1,
+			});
+		}
+	});
+
+	return decorations;
 }
 
 export function collectSyncLineDecorations(text: string): SyncLineDecoration[] {

@@ -12,8 +12,10 @@ import {
 	collectMatchedSyncGroups,
 	collectSyncLineDecorations,
 	collectSyncMarkers,
+	collectSyncTagDecorations,
 	computeAlignmentPlanFromBaseTops,
 	getSyncDecorationClassName,
+	getSyncInlineTagClassName,
 } from "../lib/sync-utils";
 import type {
 	ConnectorOverlay,
@@ -116,15 +118,22 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 		decorationCollectionsRef.current[threadId] = collection;
 
 		const lineDecorations = collectSyncLineDecorations(code);
-		collection.set(
-			lineDecorations.map(({ kind, lineNumber }) => ({
+		const inlineTagDecorations = collectSyncTagDecorations(code);
+		collection.set([
+			...lineDecorations.map(({ kind, lineNumber }) => ({
 				range: new monaco.Range(lineNumber, 1, lineNumber, 1),
 				options: {
 					isWholeLine: true,
 					className: getSyncDecorationClassName(kind),
 				},
-			}))
-		);
+			})),
+			...inlineTagDecorations.map(({ kind, lineNumber, startColumn, endColumn }) => ({
+				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
+				options: {
+					inlineClassName: getSyncInlineTagClassName(kind),
+				},
+			})),
+		]);
 	}, []);
 
 	const updateConnectorOverlay = useCallback(() => {

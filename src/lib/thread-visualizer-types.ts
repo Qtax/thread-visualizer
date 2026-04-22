@@ -22,6 +22,13 @@ export type SyncMarker = {
 	lineNumber: number;
 };
 
+export type SyncTagDecoration = {
+	kind: SyncTagKind;
+	lineNumber: number;
+	startColumn: number;
+	endColumn: number;
+};
+
 export type SyncGroupOccurrence = {
 	threadId: string;
 	lineNumber: number;
