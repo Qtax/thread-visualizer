@@ -19,7 +19,7 @@ type UseThreadVisualizerStateResult = {
 	importState: (event: ChangeEvent<HTMLInputElement>) => void;
 	isStatePanelOpen: boolean;
 	loadSavedState: (saveId: string) => void;
-	moveThread: (threadId: string, direction: -1 | 1) => void;
+	moveThread: (threadId: string, nextIndex: number) => void;
 	openImportPicker: () => void;
 	saveActionLabel: string;
 	saveCurrentState: () => void;
@@ -110,18 +110,24 @@ export function useThreadVisualizerState(): UseThreadVisualizerStateResult {
 		[threads.length]
 	);
 
-	const moveThread = useCallback((threadId: string, direction: -1 | 1) => {
+	const moveThread = useCallback((threadId: string, nextIndex: number) => {
 		setThreads((current) => {
 			const index = current.findIndex((thread) => thread.id === threadId);
-			const nextIndex = index + direction;
 
-			if (index < 0 || nextIndex < 0 || nextIndex >= current.length) {
+			if (index < 0) {
 				return current;
 			}
 
 			const next = [...current];
 			const [thread] = next.splice(index, 1);
-			next.splice(nextIndex, 0, thread);
+			const boundedIndex = Math.max(0, Math.min(nextIndex, current.length));
+			const insertionIndex = boundedIndex > index ? boundedIndex - 1 : boundedIndex;
+
+			if (!thread || insertionIndex === index) {
+				return current;
+			}
+
+			next.splice(insertionIndex, 0, thread);
 			return next;
 		});
 	}, []);

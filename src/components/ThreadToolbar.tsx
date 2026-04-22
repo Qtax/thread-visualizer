@@ -1,4 +1,4 @@
-import type { ChangeEvent, RefObject } from "react";
+import type { ChangeEvent, MutableRefObject } from "react";
 
 import { styled } from "@linaria/react";
 
@@ -45,7 +45,7 @@ const SaveNameField = styled(FieldInput)`
 `;
 
 type ThreadToolbarProps = {
-	fileInputRef: RefObject<HTMLInputElement | null>;
+	fileInputRef: MutableRefObject<HTMLInputElement | null>;
 	saveName: string;
 	saveActionLabel: string;
 	isStatePanelOpen: boolean;
@@ -54,7 +54,6 @@ type ThreadToolbarProps = {
 	onSaveCurrentState: () => void;
 	onToggleState: () => void;
 	onOpenImportPicker: () => void;
-	onAddThread: () => void;
 };
 
 export function ThreadToolbar({
@@ -67,7 +66,6 @@ export function ThreadToolbar({
 	onSaveCurrentState,
 	onToggleState,
 	onOpenImportPicker,
-	onAddThread,
 }: ThreadToolbarProps) {
 	return (
 		<Toolbar>
@@ -104,10 +102,6 @@ export function ThreadToolbar({
 
 				<ControlButton type="button" onClick={onOpenImportPicker}>
 					Import
-				</ControlButton>
-
-				<ControlButton type="button" onClick={onAddThread}>
-					Add thread
 				</ControlButton>
 			</ToolbarActions>
 		</Toolbar>

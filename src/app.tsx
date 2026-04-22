@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { css } from "@linaria/core";
 import { styled } from "@linaria/react";
 
@@ -5,6 +7,7 @@ import { ConnectorOverlay } from "./components/ConnectorOverlay";
 import { SavedStatesPanel } from "./components/SavedStatesPanel";
 import { StateJsonPanel } from "./components/StateJsonPanel";
 import { ThreadColumn } from "./components/ThreadColumn";
+import { ThreadTabs } from "./components/ThreadTabs";
 import { ThreadToolbar } from "./components/ThreadToolbar";
 import { useThreadEditors } from "./hooks/useThreadEditors";
 import { useThreadVisualizerState } from "./hooks/useThreadVisualizerState";
@@ -30,6 +33,7 @@ const syncDecorationStyles = css`
 
 const ThreadCanvasViewport = styled.div`
 	overflow-x: auto;
+	overflow-y: hidden;
 	padding-bottom: 8px;
 `;
 
@@ -39,13 +43,15 @@ const ThreadCanvas = styled.div`
 `;
 
 const ThreadColumns = styled.div`
-	display: flex;
+	display: grid;
 	min-width: 100%;
-	gap: 8px;
+	gap: 0;
 	align-items: stretch;
 `;
 
 export default function ThreadCallPathVisualizer() {
+	const [draggedThreadId, setDraggedThreadId] = useState<string | null>(null);
+	const [dropIndex, setDropIndex] = useState<number | null>(null);
 	const {
 		addThread,
 		applyStateText,
@@ -72,6 +78,7 @@ export default function ThreadCallPathVisualizer() {
 		updateThreadName,
 		removeThread,
 	} = useThreadVisualizerState();
+	const threadTrackTemplate = `repeat(${threads.length}, minmax(300px, 1fr))`;
 	const {
 		connectorOverlay,
 		handleMount,
@@ -93,7 +100,6 @@ export default function ThreadCallPathVisualizer() {
 					onSaveCurrentState={saveCurrentState}
 					onToggleState={showState}
 					onOpenImportPicker={openImportPicker}
-					onAddThread={addThread}
 				/>
 
 				<SavedStatesPanel
@@ -114,21 +120,49 @@ export default function ThreadCallPathVisualizer() {
 				)}
 
 				<ThreadCanvasViewport>
+					<ThreadTabs
+						trackTemplate={threadTrackTemplate}
+						threads={threads}
+						activeDragThreadId={draggedThreadId}
+						dropIndex={dropIndex}
+						onDragStart={(threadId) => {
+							setDraggedThreadId(threadId);
+							setDropIndex(null);
+						}}
+						onDragEnd={() => {
+							setDraggedThreadId(null);
+							setDropIndex(null);
+						}}
+						onDragOver={(nextIndex) => {
+							if (draggedThreadId) {
+								setDropIndex(nextIndex);
+							}
+						}}
+						onDrop={(nextIndex) => {
+							if (draggedThreadId) {
+								moveThread(draggedThreadId, nextIndex);
+							}
+							setDraggedThreadId(null);
+							setDropIndex(null);
+						}}
+						onNameChange={updateThreadName}
+						onRemove={removeThread}
+						onAddThread={addThread}
+					/>
+
 					<ThreadCanvas ref={threadsCanvasRef}>
 						<ConnectorOverlay overlay={connectorOverlay} />
 
-						<ThreadColumns ref={threadsContentRef}>
-							{threads.map((thread, index) => (
+						<ThreadColumns
+							ref={threadsContentRef}
+							style={{ gridTemplateColumns: threadTrackTemplate }}
+						>
+							{threads.map((thread) => (
 								<ThreadColumn
 									key={thread.id}
 									thread={thread}
-									index={index}
-									threadsLength={threads.length}
 									sharedEditorHeight={sharedEditorHeight}
 									onCodeChange={updateThread}
-									onNameChange={updateThreadName}
-									onMove={moveThread}
-									onRemove={removeThread}
 									onMount={handleMount}
 								/>
 							))}
