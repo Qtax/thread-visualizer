@@ -382,6 +382,7 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 
 				editor.onDidChangeModelContent(() => {
 					syncEditorHeight(threadId);
+					applySyncDecorations(threadId, editor.getValue());
 				});
 
 				editor.onKeyDown((event) => {
