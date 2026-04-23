@@ -493,6 +493,8 @@ export function useThreadEditors(
 					syncEditorHeight(threadId);
 					if (!isApplyingZonesRef.current) {
 						requestAnimationFrame(() => applyViewZonesRef.current());
+					} else {
+						pendingApplyViewZonesRef.current = true;
 					}
 				});
 
@@ -500,6 +502,8 @@ export function useThreadEditors(
 					syncEditorFontSize(editor);
 					if (!isApplyingZonesRef.current) {
 						requestAnimationFrame(() => applyViewZonesRef.current());
+					} else {
+						pendingApplyViewZonesRef.current = true;
 					}
 				});
 
@@ -524,6 +528,8 @@ export function useThreadEditors(
 					applySyncDecorations(threadId, editor.getValue());
 					if (!isApplyingZonesRef.current) {
 						requestAnimationFrame(() => applyViewZonesRef.current());
+					} else {
+						pendingApplyViewZonesRef.current = true;
 					}
 				});
 
