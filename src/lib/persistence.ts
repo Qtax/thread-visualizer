@@ -29,29 +29,47 @@ function createInitialThreads(): Thread[] {
 	return [
 		{
 			id: crypto.randomUUID(),
-			name: "Thread A",
+			name: "Main",
 			code: [
-				"boot()",
-				"prepare request context",
-				"[sync ready] wait until worker is initialized",
-				"send request",
-				"do local work while response is processing",
-				"[sync commit] wait for shared state flush",
-				"complete()",
+				"Write pseudocode in each editor.",
+				"Sync tags create visual connections.",
+				"",
+				"── [sync] mutual alignment ──",
+				"setup()",
+				"[sync initialized] aligns with Worker",
+				"begin work",
+				"",
+				"── [set] signal another thread ──",
+				"compute()",
+				"[set result-ready] continues immediately",
+				"wrap up local work",
+				"",
+				"── [wait] pause for a signal ──",
+				"[wait cleanup-done] waits for Worker",
+				"shutdown()",
 			].join("\n"),
 		},
 		{
 			id: crypto.randomUUID(),
-			name: "Thread B",
+			name: "Worker",
 			code: [
-				"boot()",
-				"load worker config",
-				"init worker",
-				"[sync ready] signal that requests can start",
-				"process request",
-				"persist shared state",
-				"[sync commit] signal commit done",
-				"cleanup()",
+				"Add and remove threads from the tab bar.",
+				"Move the threads by dragging the tabs.",
+				"",
+				"── [sync] mutual alignment ──",
+				"load config",
+				"load plugins",
+				"[sync initialized] aligns with Main",
+				"start listening",
+				"",
+				"── [wait] pause for a signal ──",
+				"[wait result-ready] waits for Main",
+				"process result",
+				"",
+				"── [set] signal another thread ──",
+				"flush caches",
+				"[set cleanup-done] signals Main",
+				"exit",
 			].join("\n"),
 		},
 	];
@@ -287,6 +305,15 @@ export function loadWorkspaces(): { workspaces: Workspace[]; activeId: string } 
 	if (typeof window === "undefined") {
 		const initial = createWorkspace("Getting started", createInitialThreads());
 		return { workspaces: [initial], activeId: initial.id };
+	}
+
+	// Allow ?reset in the URL to wipe all state and start fresh.
+	if (new URLSearchParams(window.location.search).has("reset")) {
+		window.localStorage.removeItem(WORKSPACES_STORAGE_KEY);
+		window.localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+		window.localStorage.removeItem(STORAGE_KEY);
+		window.localStorage.removeItem(SAVES_STORAGE_KEY);
+		window.history.replaceState(null, "", window.location.pathname);
 	}
 
 	try {
