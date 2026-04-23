@@ -69,7 +69,6 @@ export const SurfacePanel = styled.section`
 	border: 1px solid ${palette.border};
 	border-radius: 20px;
 	background: ${palette.surface};
-	//box-shadow: ${palette.shadow};
 	padding: 10px;
 `;
 
