@@ -2,6 +2,7 @@
 	"name": "thread-visualizer",
 	"private": true,
 	"version": "0.1.0",
+	"license": "MIT",
 	"type": "module",
 	"dependencies": {
 		"@monaco-editor/react": "4.7.0",
