@@ -9,7 +9,7 @@ import {
 	persistActiveWorkspaceId,
 	persistWorkspaces,
 } from "../lib/persistence";
-import type { Thread, UndoEntry, Workspace } from "../lib/thread-visualizer-types";
+import type { CursorPosition, Thread, UndoEntry, Workspace } from "../lib/thread-visualizer-types";
 
 type UseWorkspaceManagerResult = {
 	// Thread operations
@@ -34,6 +34,7 @@ type UseWorkspaceManagerResult = {
 	redo: () => void;
 	canUndo: boolean;
 	canRedo: boolean;
+	cursorAdapterRef: React.MutableRefObject<CursorAdapter | null>;
 
 	// Import/export
 	fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -42,7 +43,14 @@ type UseWorkspaceManagerResult = {
 	exportWorkspaces: (workspaceIds: string[]) => void;
 
 	// For external undo integration
-	pushUndoSnapshot: () => void;
+	pushUndoSnapshot: (cursorOverrides?: Record<string, CursorPosition>) => void;
+};
+
+/** Adapter exposed by the editor layer so the workspace can read/apply cursor state. */
+export type CursorAdapter = {
+	getCursors: () => Record<string, CursorPosition>;
+	applyCursors: (cursors: Record<string, CursorPosition>) => void;
+	focusEditor: (threadId: string) => void;
 };
 
 /** Debounce timer for persisting to localStorage. */
@@ -66,6 +74,49 @@ function threadsEqual(a: Thread[], b: Thread[]): boolean {
 	return true;
 }
 
+/** Returns the set of thread IDs whose code differs between `before` and `after`. */
+function diffChangedThreadIds(before: Thread[], after: Thread[]): Set<string> {
+	const beforeMap = new Map(before.map((t) => [t.id, t.code]));
+	const changed = new Set<string>();
+	for (const thread of after) {
+		const prev = beforeMap.get(thread.id);
+		if (prev === undefined || prev !== thread.code) {
+			changed.add(thread.id);
+		}
+	}
+	return changed;
+}
+
+/**
+ * Apply restored cursor positions only to editors whose content changed,
+ * and focus the first changed editor so the user sees where the change happened.
+ */
+function applyRestoredCursors(
+	adapter: CursorAdapter | null,
+	cursors: Record<string, CursorPosition> | undefined,
+	changedThreadIds: Set<string>
+): void {
+	if (!adapter || changedThreadIds.size === 0) {
+		return;
+	}
+
+	if (cursors) {
+		const filtered: Record<string, CursorPosition> = {};
+		for (const id of changedThreadIds) {
+			if (cursors[id]) {
+				filtered[id] = cursors[id];
+			}
+		}
+		adapter.applyCursors(filtered);
+	}
+
+	// Focus the first changed editor so the user's attention follows the change.
+	const firstChanged = changedThreadIds.values().next().value;
+	if (firstChanged) {
+		adapter.focusEditor(firstChanged);
+	}
+}
+
 export function useWorkspaceManager(): UseWorkspaceManagerResult {
 	const [state, setState] = useState(() => loadWorkspaces());
 	const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,6 +125,9 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 	// True while an undo/redo is in progress — blocks spurious snapshot pushes
 	// caused by Monaco reacting to restored thread content.
 	const isRestoringRef = useRef(false);
+
+	// Adapter set by the editor layer for reading/applying cursor positions.
+	const cursorAdapterRef = useRef<CursorAdapter | null>(null);
 
 	const activeWorkspace =
 		state.workspaces.find((workspace) => workspace.id === state.activeId) ??
@@ -125,32 +179,42 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 	}, []);
 
 	// --- Undo snapshot ---
-	const pushUndoSnapshot = useCallback(() => {
-		if (isRestoringRef.current) {
-			return;
-		}
-
-		updateActiveWorkspace((workspace) => {
-			// Don't push a duplicate of the current top of the undo stack
-			if (workspace.undoStack.length > 0) {
-				const top = workspace.undoStack[workspace.undoStack.length - 1];
-				if (threadsEqual(top.threads, workspace.threads)) {
-					return workspace;
-				}
+	const pushUndoSnapshot = useCallback(
+		(cursorOverrides?: Record<string, CursorPosition>) => {
+			if (isRestoringRef.current) {
+				return;
 			}
 
-			const entry: UndoEntry = {
-				threads: cloneThreads(workspace.threads),
-				timestamp: Date.now(),
+			const baseCursors = cursorAdapterRef.current?.getCursors() ?? {};
+			const cursors: Record<string, CursorPosition> = {
+				...baseCursors,
+				...(cursorOverrides ?? {}),
 			};
 
-			return {
-				...workspace,
-				undoStack: [...workspace.undoStack, entry].slice(-MAX_UNDO_ENTRIES),
-				redoStack: [],
-			};
-		});
-	}, [updateActiveWorkspace]);
+			updateActiveWorkspace((workspace) => {
+				// Don't push a duplicate of the current top of the undo stack
+				if (workspace.undoStack.length > 0) {
+					const top = workspace.undoStack[workspace.undoStack.length - 1];
+					if (threadsEqual(top.threads, workspace.threads)) {
+						return workspace;
+					}
+				}
+
+				const entry: UndoEntry = {
+					threads: cloneThreads(workspace.threads),
+					cursors,
+					timestamp: Date.now(),
+				};
+
+				return {
+					...workspace,
+					undoStack: [...workspace.undoStack, entry].slice(-MAX_UNDO_ENTRIES),
+					redoStack: [],
+				};
+			});
+		},
+		[updateActiveWorkspace]
+	);
 
 	// --- Thread mutations (all push undo snapshot first) ---
 	const mutateThreads = useCallback(
@@ -271,6 +335,9 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 
 	const undo = useCallback(() => {
 		isRestoringRef.current = true;
+		const currentCursors = cursorAdapterRef.current?.getCursors() ?? {};
+		let targetCursors: Record<string, CursorPosition> | undefined;
+		let changedThreadIds: Set<string> = new Set();
 
 		updateActiveWorkspace((workspace) => {
 			if (workspace.undoStack.length === 0) {
@@ -279,8 +346,11 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 
 			const nextUndoStack = [...workspace.undoStack];
 			const entry = nextUndoStack.pop()!;
+			changedThreadIds = diffChangedThreadIds(workspace.threads, entry.threads);
+			targetCursors = entry.cursors;
 			const redoEntry: UndoEntry = {
 				threads: cloneThreads(workspace.threads),
+				cursors: currentCursors,
 				timestamp: Date.now(),
 			};
 
@@ -295,11 +365,15 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 
 		requestAnimationFrame(() => {
 			isRestoringRef.current = false;
+			applyRestoredCursors(cursorAdapterRef.current, targetCursors, changedThreadIds);
 		});
 	}, [updateActiveWorkspace]);
 
 	const redo = useCallback(() => {
 		isRestoringRef.current = true;
+		const currentCursors = cursorAdapterRef.current?.getCursors() ?? {};
+		let targetCursors: Record<string, CursorPosition> | undefined;
+		let changedThreadIds: Set<string> = new Set();
 
 		updateActiveWorkspace((workspace) => {
 			if (workspace.redoStack.length === 0) {
@@ -308,8 +382,11 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 
 			const nextRedoStack = [...workspace.redoStack];
 			const entry = nextRedoStack.pop()!;
+			changedThreadIds = diffChangedThreadIds(workspace.threads, entry.threads);
+			targetCursors = entry.cursors;
 			const undoEntry: UndoEntry = {
 				threads: cloneThreads(workspace.threads),
+				cursors: currentCursors,
 				timestamp: Date.now(),
 			};
 
@@ -324,6 +401,7 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 
 		requestAnimationFrame(() => {
 			isRestoringRef.current = false;
+			applyRestoredCursors(cursorAdapterRef.current, targetCursors, changedThreadIds);
 		});
 	}, [updateActiveWorkspace]);
 
@@ -576,6 +654,7 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		redo,
 		canUndo,
 		canRedo,
+		cursorAdapterRef,
 
 		fileInputRef,
 		importState,

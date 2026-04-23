@@ -20,6 +20,7 @@ import {
 import type {
 	ConnectorOverlay,
 	ConnectorPath,
+	CursorPosition,
 	Thread,
 	ZonePlan,
 } from "../lib/thread-visualizer-types";
@@ -49,6 +50,9 @@ type UseThreadEditorsResult = {
 		editor: Monaco.editor.IStandaloneCodeEditor,
 		monaco: typeof import("monaco-editor")
 	) => void;
+	getCursors: () => Record<string, CursorPosition>;
+	applyCursors: (cursors: Record<string, CursorPosition>) => void;
+	focusEditor: (threadId: string) => void;
 	sharedEditorHeight: number;
 	threadsCanvasRef: React.MutableRefObject<HTMLDivElement | null>;
 	threadsContentRef: React.MutableRefObject<HTMLDivElement | null>;
@@ -56,7 +60,7 @@ type UseThreadEditorsResult = {
 
 export function useThreadEditors(
 	threads: Thread[],
-	pushUndoSnapshot?: () => void
+	pushUndoSnapshot?: (cursorOverrides?: Record<string, CursorPosition>) => void
 ): UseThreadEditorsResult {
 	const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
 	const [connectorOverlay, setConnectorOverlay] =
@@ -81,6 +85,34 @@ export function useThreadEditors(
 	pushUndoSnapshotRef.current = pushUndoSnapshot;
 	const contentChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const hasPendingSnapshotRef = useRef(false);
+	const getCursors = useCallback((): Record<string, CursorPosition> => {
+		const positions: Record<string, CursorPosition> = {};
+		for (const [threadId, editor] of Object.entries(editorsRef.current)) {
+			if (editor) {
+				const pos = editor.getPosition();
+				if (pos) {
+					positions[threadId] = { lineNumber: pos.lineNumber, column: pos.column };
+				}
+			}
+		}
+		return positions;
+	}, []);
+
+	const applyCursors = useCallback((cursors: Record<string, CursorPosition>) => {
+		for (const [threadId, position] of Object.entries(cursors)) {
+			const editor = editorsRef.current[threadId];
+			if (!editor) continue;
+			const model = editor.getModel();
+			if (!model) continue;
+			const clamped = model.validatePosition(position);
+			editor.setPosition(clamped);
+			editor.revealPositionInCenterIfOutsideViewport(clamped);
+		}
+	}, []);
+
+	const focusEditor = useCallback((threadId: string) => {
+		editorsRef.current[threadId]?.focus();
+	}, []);
 
 	const sharedEditorHeight = Math.max(
 		MIN_EDITOR_HEIGHT,
@@ -507,11 +539,23 @@ export function useThreadEditors(
 					}
 				});
 
-				editor.onDidChangeModelContent(() => {
-					// Push undo snapshot at the start of a typing burst
+				editor.onDidChangeModelContent((event) => {
+					// Push undo snapshot at the start of a typing burst.
+					// Capture pre-edit cursor for the editing thread from the change event:
+					// `event.changes[0].range` is the range that was replaced, so its start is
+					// where the edit began (i.e. where the cursor was before the edit).
 					if (!hasPendingSnapshotRef.current && pushUndoSnapshotRef.current) {
 						hasPendingSnapshotRef.current = true;
-						pushUndoSnapshotRef.current();
+						const firstChange = event.changes[0];
+						const cursorOverrides = firstChange
+							? {
+									[threadId]: {
+										lineNumber: firstChange.range.startLineNumber,
+										column: firstChange.range.startColumn,
+									},
+								}
+							: undefined;
+						pushUndoSnapshotRef.current(cursorOverrides);
 					}
 
 					// Reset the debounce timer — after 800ms of inactivity,
@@ -595,6 +639,9 @@ export function useThreadEditors(
 	return {
 		connectorOverlay,
 		handleMount,
+		getCursors,
+		applyCursors,
+		focusEditor,
 		sharedEditorHeight,
 		threadsCanvasRef,
 		threadsContentRef,

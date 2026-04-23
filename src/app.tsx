@@ -98,6 +98,7 @@ export default function ThreadCallPathVisualizer() {
 		redo,
 		canUndo,
 		canRedo,
+		cursorAdapterRef,
 
 		fileInputRef,
 		importState,
@@ -110,10 +111,15 @@ export default function ThreadCallPathVisualizer() {
 	const {
 		connectorOverlay,
 		handleMount,
+		getCursors,
+		applyCursors,
+		focusEditor,
 		sharedEditorHeight,
 		threadsCanvasRef,
 		threadsContentRef,
 	} = useThreadEditors(threads, pushUndoSnapshot);
+
+	cursorAdapterRef.current = { getCursors, applyCursors, focusEditor };
 
 	return (
 		<AppSurface className={`${globalStyles} ${syncDecorationStyles}`}>

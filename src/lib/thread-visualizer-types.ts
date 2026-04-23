@@ -83,7 +83,14 @@ export type Workspace = {
 /** A snapshot of the threads array at a point in time. */
 export type UndoEntry = {
 	threads: Thread[];
+	cursors?: Record<string, CursorPosition>;
 	timestamp: number;
+};
+
+/** A 1-based Monaco cursor position. */
+export type CursorPosition = {
+	lineNumber: number;
+	column: number;
 };
 
 export type ZonePlan = Record<string, Record<number, ZoneAdjustment>>;

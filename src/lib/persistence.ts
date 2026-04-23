@@ -117,7 +117,28 @@ function normalizeUndoEntries(value: unknown): UndoEntry[] {
 		)
 		.map((item) => {
 			const threads = normalizeThreads(item.threads);
-			return threads ? { threads, timestamp: item.timestamp } : null;
+			if (!threads) return null;
+			const rawCursors = (item as { cursors?: unknown }).cursors;
+			let cursors: Record<string, { lineNumber: number; column: number }> | undefined;
+			if (rawCursors && typeof rawCursors === "object" && !Array.isArray(rawCursors)) {
+				cursors = {};
+				for (const [key, value] of Object.entries(rawCursors as Record<string, unknown>)) {
+					if (
+						value &&
+						typeof value === "object" &&
+						typeof (value as { lineNumber?: unknown }).lineNumber === "number" &&
+						typeof (value as { column?: unknown }).column === "number"
+					) {
+						cursors[key] = {
+							lineNumber: (value as { lineNumber: number }).lineNumber,
+							column: (value as { column: number }).column,
+						};
+					}
+				}
+			}
+			const entry: UndoEntry = { threads, timestamp: item.timestamp };
+			if (cursors) entry.cursors = cursors;
+			return entry;
 		})
 		.filter((entry): entry is UndoEntry => entry !== null)
 		.slice(-MAX_UNDO_ENTRIES);
