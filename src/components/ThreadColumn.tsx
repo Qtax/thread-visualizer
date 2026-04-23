@@ -50,6 +50,7 @@ const THREAD_EDITOR_OPTIONS = {
 	suggestOnTriggerCharacters: false,
 	occurrencesHighlight: "off",
 	selectionHighlight: false,
+	emptySelectionClipboard: false,
 	contextmenu: true,
 	bracketPairColorization: { enabled: false },
 } as const;
