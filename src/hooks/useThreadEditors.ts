@@ -30,7 +30,7 @@ const MIN_EDITOR_HEIGHT = 180;
 const DEFAULT_EDITOR_FONT_SIZE = 14;
 const DEFAULT_EDITOR_LINE_HEIGHT = 22;
 const COMPACT_EDITOR_FONT_SIZE = 12;
-const COMPACT_EDITOR_LINE_HEIGHT = 19;
+const COMPACT_EDITOR_LINE_HEIGHT = 20;
 const COMPACT_EDITOR_WIDTH_THRESHOLD = 600;
 
 type ConnectorEndpoint = {
@@ -411,7 +411,9 @@ export function useThreadEditors(
 					.filter(([, adjustment]) => adjustment.height > 0.5)
 					.sort((a, b) => Number(a[0]) - Number(b[0]))
 					.forEach(([rawLine, adjustment]) => {
-						zoneIds.push(addViewZone(editor, Number(rawLine), adjustment));
+						zoneIds.push(
+							addViewZone(editor, monacoRef.current!, Number(rawLine), adjustment)
+						);
 					});
 
 				viewZoneIdsRef.current[thread.id] = zoneIds;

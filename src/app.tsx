@@ -57,6 +57,18 @@ const syncDecorationStyles = css`
 	:global(.monaco-editor .line-comment-decoration) {
 		color: color-mix(in srgb, currentColor 40%, white);
 	}
+
+	:global(.monaco-editor .lines-content .core-guide-indent) {
+		box-shadow: none !important;
+		background-image: linear-gradient(
+			to bottom,
+			var(--indent-color) 0 50%,
+			transparent 50% 100%
+		);
+		background-position: left top;
+		background-repeat: repeat-y;
+		background-size: 1px 2px;
+	}
 `;
 
 const ThreadCanvasViewport = styled.div`

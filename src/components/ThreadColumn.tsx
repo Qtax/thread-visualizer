@@ -45,7 +45,7 @@ const THREAD_EDITOR_OPTIONS = {
 	wordWrap: "on",
 	wrappingIndent: "indent",
 	padding: { top: 8, bottom: 8 },
-	guides: { indentation: false },
+	guides: { indentation: true },
 	quickSuggestions: false,
 	suggestOnTriggerCharacters: false,
 	occurrencesHighlight: "off",
