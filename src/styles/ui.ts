@@ -2,18 +2,15 @@ import { css } from "@linaria/core";
 import { styled } from "@linaria/react";
 
 export const palette = {
-	pageBackground: "#f3efe6",
-	pageBackgroundAccent: "#fbf8f1",
+	pageBackground: "#f0f0f0",
 	surface: "#ffffff",
-	surfaceSoft: "#fcfaf5",
-	border: "#d7d0c3",
-	borderStrong: "#a39a8a",
-	text: "#201d18",
-	mutedText: "#6f685c",
-	actionSurface: "#f8f3e8",
-	actionSurfaceHover: "#efe6d6",
-	focusRing: "rgba(182, 141, 69, 0.22)",
-	shadow: "0 14px 28px rgba(42, 33, 20, 0.08)",
+	surfaceHover: "#f5f5f5",
+	border: "#e0e0e0",
+	borderStrong: "#c0c0c0",
+	text: "#1e1e1e",
+	mutedText: "#888",
+	focusRing: "rgba(0, 120, 212, 0.35)",
+	shadow: "0 4px 16px rgba(0,0,0,0.12)",
 } as const;
 
 const typography = {
@@ -23,7 +20,14 @@ const typography = {
 
 export const globalStyles = css`
 	:global(:root) {
+		box-sizing: border-box;
 		color-scheme: light;
+	}
+
+	:global(*),
+	:global(*::before),
+	:global(*::after) {
+		box-sizing: inherit;
 	}
 
 	:global(html),
@@ -51,36 +55,30 @@ export const globalStyles = css`
 
 export const AppSurface = styled.div`
 	min-height: 100vh;
-	background: linear-gradient(
-		180deg,
-		${palette.pageBackgroundAccent} 0%,
-		${palette.pageBackground} 100%
-	);
+	background: ${palette.pageBackground};
 	color: ${palette.text};
 	font-family: ${typography.ui};
 `;
 
 export const WorkspaceFrame = styled.div`
-	padding: 12px;
+	padding: 8px;
 `;
 
 export const SurfacePanel = styled.section`
-	margin-bottom: 12px;
+	margin-bottom: 8px;
 	border: 1px solid ${palette.border};
-	border-radius: 20px;
 	background: ${palette.surface};
-	padding: 10px;
+	padding: 8px;
 `;
 
 export const PanelHeading = styled.div`
-	margin-bottom: 8px;
-	font-size: 0.95rem;
+	margin-bottom: 6px;
+	font-size: 0.8rem;
 	font-weight: 600;
-	letter-spacing: 0.01em;
 `;
 
 export const DetailText = styled.div`
-	font-size: 0.75rem;
+	font-size: 0.7rem;
 	color: ${palette.mutedText};
 `;
 
@@ -88,62 +86,51 @@ export const ControlGroup = styled.div`
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 8px;
+	gap: 4px;
 `;
 
 export const ControlButton = styled.button`
 	appearance: none;
-	border: 1px solid ${palette.borderStrong};
-	border-radius: 12px;
-	background: ${palette.actionSurface};
+	border: 1px solid ${palette.border};
+	background: ${palette.surface};
 	color: ${palette.text};
-	padding: 8px 12px;
-	font-size: 0.875rem;
-	font-weight: 600;
-	line-height: 1.2;
-	transition:
-		background-color 120ms ease,
-		border-color 120ms ease,
-		box-shadow 120ms ease;
+	padding: 3px 8px;
+	font-size: 0.75rem;
+	line-height: 1.4;
+	cursor: pointer;
 
 	&:hover:not(:disabled) {
-		background: ${palette.actionSurfaceHover};
+		background: ${palette.surfaceHover};
 	}
 
 	&:focus-visible {
-		outline: none;
-		border-color: #7f6440;
-		box-shadow: 0 0 0 3px ${palette.focusRing};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
 	}
 
 	&:disabled {
-		cursor: not-allowed;
 		opacity: 0.4;
+		cursor: default;
 	}
 `;
 
 export const FieldInput = styled.input`
 	appearance: none;
 	min-width: 0;
-	border: 1px solid ${palette.borderStrong};
-	border-radius: 14px;
-	background: ${palette.surfaceSoft};
+	border: 1px solid ${palette.border};
+	background: ${palette.surface};
 	color: ${palette.text};
-	padding: 8px 12px;
-	font-size: 0.875rem;
-	line-height: 1.25;
-	transition:
-		border-color 120ms ease,
-		box-shadow 120ms ease;
+	padding: 3px 6px;
+	font-size: 0.75rem;
+	line-height: 1.4;
 
 	&::placeholder {
 		color: ${palette.mutedText};
 	}
 
 	&:focus-visible {
-		outline: none;
-		border-color: #7f6440;
-		box-shadow: 0 0 0 3px ${palette.focusRing};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
 	}
 `;
 
@@ -151,33 +138,8 @@ export const HiddenFileInput = styled.input`
 	display: none;
 `;
 
-export const EditorTextArea = styled.textarea`
-	width: 100%;
-	min-height: 220px;
-	resize: vertical;
-	border: 1px solid ${palette.borderStrong};
-	border-radius: 16px;
-	background: ${palette.surfaceSoft};
-	color: ${palette.text};
-	padding: 10px 12px;
-	font-size: 0.75rem;
-	line-height: 1.5;
-	transition:
-		border-color 120ms ease,
-		box-shadow 120ms ease;
-
-	&:focus-visible {
-		outline: none;
-		border-color: #7f6440;
-		box-shadow: 0 0 0 3px ${palette.focusRing};
-	}
-`;
-
 export const InlineCode = styled.code`
-	display: inline-block;
-	border-radius: 8px;
-	background: #efe7d6;
-	padding: 0 4px;
-	font-size: 0.92em;
-	color: ${palette.text};
+	background: ${palette.surfaceHover};
+	padding: 0 3px;
+	font-size: 0.88em;
 `;

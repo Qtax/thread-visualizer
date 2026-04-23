@@ -97,6 +97,7 @@ export default function ThreadCallPathVisualizer() {
 		fileInputRef,
 		importState,
 		openImportPicker,
+		exportWorkspaces,
 
 		pushUndoSnapshot,
 	} = useWorkspaceManager();
@@ -120,11 +121,13 @@ export default function ThreadCallPathVisualizer() {
 					canRedo={canRedo}
 					onImportState={importState}
 					onOpenImportPicker={openImportPicker}
+					onExportWorkspaces={exportWorkspaces}
 					onSwitchWorkspace={switchWorkspace}
 					onCreateWorkspace={createNewWorkspace}
 					onDuplicateWorkspace={duplicateWorkspace}
 					onRenameWorkspace={renameWorkspace}
 					onDeleteWorkspace={deleteWorkspace}
+					onAddThread={addThread}
 					onUndo={undo}
 					onRedo={redo}
 				/>
@@ -157,7 +160,6 @@ export default function ThreadCallPathVisualizer() {
 						}}
 						onNameChange={updateThreadName}
 						onRemove={removeThread}
-						onAddThread={addThread}
 					/>
 
 					<ThreadCanvas ref={threadsCanvasRef}>

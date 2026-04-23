@@ -9,43 +9,44 @@ import { ControlButton, HiddenFileInput, InlineCode, palette } from "../styles/u
 const Toolbar = styled.header`
 	display: flex;
 	flex-wrap: wrap;
-	align-items: flex-start;
-	justify-content: space-between;
-	gap: 12px;
-	margin-bottom: 12px;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 0;
+	margin-bottom: 4px;
+	border-bottom: 1px solid ${palette.border};
 `;
 
 const ToolbarIntro = styled.div`
-	max-width: 42rem;
+	margin-left: auto;
+	text-align: right;
 `;
 
 const ToolbarTitle = styled.h1`
 	margin: 0;
-	font-size: 1.35rem;
-	font-weight: 700;
-	letter-spacing: -0.02em;
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: ${palette.mutedText};
 `;
 
 const ToolbarDescription = styled.p`
-	margin: 4px 0 0;
-	font-size: 0.75rem;
-	line-height: 1.5;
+	margin: 1px 0 0;
+	font-size: 0.68rem;
 	color: ${palette.mutedText};
 `;
 
 const ToolbarActions = styled.div`
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
-	gap: 8px;
+	gap: 2px;
 `;
 
 const ImportFileField = styled(HiddenFileInput)``;
 
-const UndoButton = styled(ControlButton)`
-	padding: 6px 10px;
-	font-size: 0.8rem;
-	min-width: 32px;
+const Separator = styled.div`
+	width: 1px;
+	height: 16px;
+	background: ${palette.border};
+	margin: 0 4px;
 `;
 
 type ThreadToolbarProps = {
@@ -56,11 +57,13 @@ type ThreadToolbarProps = {
 	canRedo: boolean;
 	onImportState: (event: ChangeEvent<HTMLInputElement>) => void;
 	onOpenImportPicker: () => void;
+	onExportWorkspaces: (workspaceIds: string[]) => void;
 	onSwitchWorkspace: (workspaceId: string) => void;
 	onCreateWorkspace: () => void;
 	onDuplicateWorkspace: () => void;
 	onRenameWorkspace: (name: string) => void;
 	onDeleteWorkspace: (workspaceId: string) => void;
+	onAddThread: () => void;
 	onUndo: () => void;
 	onRedo: () => void;
 };
@@ -73,25 +76,18 @@ export function ThreadToolbar({
 	canRedo,
 	onImportState,
 	onOpenImportPicker,
+	onExportWorkspaces,
 	onSwitchWorkspace,
 	onCreateWorkspace,
 	onDuplicateWorkspace,
 	onRenameWorkspace,
 	onDeleteWorkspace,
+	onAddThread,
 	onUndo,
 	onRedo,
 }: ThreadToolbarProps) {
 	return (
 		<Toolbar>
-			<ToolbarIntro>
-				<ToolbarTitle>Thread Call Path Visualizer</ToolbarTitle>
-				<ToolbarDescription>
-					Write one step per line. Matching <InlineCode>[sync ID]</InlineCode>,{" "}
-					<InlineCode>[wait ID]</InlineCode>, and <InlineCode>[set ID]</InlineCode>{" "}
-					markers align vertically across threads.
-				</ToolbarDescription>
-			</ToolbarIntro>
-
 			<ToolbarActions>
 				<ImportFileField
 					ref={fileInputRef}
@@ -108,30 +104,44 @@ export function ThreadToolbar({
 					onDuplicate={onDuplicateWorkspace}
 					onRename={onRenameWorkspace}
 					onDelete={onDeleteWorkspace}
+					onExport={onExportWorkspaces}
+					onImport={onOpenImportPicker}
 				/>
 
-				<UndoButton
+				<Separator />
+
+				<ControlButton type="button" onClick={onAddThread} title="Add thread">
+					+ Thread
+				</ControlButton>
+
+				<Separator />
+
+				<ControlButton
 					type="button"
 					onClick={onUndo}
 					disabled={!canUndo}
 					title="Undo (Ctrl+Z)"
 				>
 					↩
-				</UndoButton>
+				</ControlButton>
 
-				<UndoButton
+				<ControlButton
 					type="button"
 					onClick={onRedo}
 					disabled={!canRedo}
 					title="Redo (Ctrl+Y)"
 				>
 					↪
-				</UndoButton>
-
-				<ControlButton type="button" onClick={onOpenImportPicker}>
-					Import
 				</ControlButton>
 			</ToolbarActions>
+
+			<ToolbarIntro>
+				<ToolbarTitle>Thread Call Path Visualizer</ToolbarTitle>
+				<ToolbarDescription>
+					Write <InlineCode>[sync ID]</InlineCode> <InlineCode>[wait ID]</InlineCode>{" "}
+					<InlineCode>[set ID]</InlineCode> align across threads
+				</ToolbarDescription>
+			</ToolbarIntro>
 		</Toolbar>
 	);
 }

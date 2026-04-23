@@ -39,6 +39,7 @@ type UseWorkspaceManagerResult = {
 	fileInputRef: React.RefObject<HTMLInputElement | null>;
 	importState: (event: ChangeEvent<HTMLInputElement>) => void;
 	openImportPicker: () => void;
+	exportWorkspaces: (workspaceIds: string[]) => void;
 
 	// For external undo integration
 	pushUndoSnapshot: () => void;
@@ -460,19 +461,61 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		const reader = new FileReader();
 		reader.onload = () => {
 			try {
-				const parsed = JSON.parse(String(reader.result)) as { threads?: unknown };
-				const importedThreads = normalizeThreads(parsed.threads);
-				if (!importedThreads) {
+				const parsed = JSON.parse(String(reader.result)) as unknown;
+				if (!parsed || typeof parsed !== "object") {
 					return;
 				}
 
-				const name = file.name.replace(/\.json$/i, "") || "Imported";
-				const workspace = createWorkspace(name, importedThreads);
+				// Multi-workspace format: { workspaces: [...] }
+				if (
+					"workspaces" in parsed &&
+					Array.isArray((parsed as { workspaces: unknown }).workspaces)
+				) {
+					const rawWorkspaces = (parsed as { workspaces: unknown[] }).workspaces;
+					const imported: Workspace[] = [];
 
-				setState((current) => ({
-					workspaces: [...current.workspaces, workspace],
-					activeId: workspace.id,
-				}));
+					for (const raw of rawWorkspaces) {
+						if (!raw || typeof raw !== "object") {
+							continue;
+						}
+						const candidate = raw as { name?: unknown; threads?: unknown };
+						const threads = normalizeThreads(candidate.threads);
+						if (!threads) {
+							continue;
+						}
+						const name =
+							typeof candidate.name === "string" && candidate.name.trim()
+								? candidate.name.trim()
+								: "Imported";
+						imported.push(createWorkspace(name, threads));
+					}
+
+					if (imported.length > 0) {
+						setState((current) => ({
+							workspaces: [...current.workspaces, ...imported],
+							activeId: imported[0].id,
+						}));
+					}
+					return;
+				}
+
+				// Legacy single-workspace format: { threads: [...] }
+				if ("threads" in parsed) {
+					const importedThreads = normalizeThreads(
+						(parsed as { threads: unknown }).threads
+					);
+					if (!importedThreads) {
+						return;
+					}
+
+					const name = file.name.replace(/\.json$/i, "") || "Imported";
+					const workspace = createWorkspace(name, importedThreads);
+
+					setState((current) => ({
+						workspaces: [...current.workspaces, workspace],
+						activeId: workspace.id,
+					}));
+				}
 			} catch {
 				// Ignore invalid imports.
 			} finally {
@@ -484,6 +527,34 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		};
 		reader.readAsText(file);
 	}, []);
+
+	const exportWorkspaces = useCallback(
+		(workspaceIds: string[]) => {
+			const selected = state.workspaces.filter((w) => workspaceIds.includes(w.id));
+			if (selected.length === 0) {
+				return;
+			}
+
+			const payload = {
+				workspaces: selected.map((w) => ({
+					name: w.name,
+					threads: w.threads,
+				})),
+			};
+
+			const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+			const url = URL.createObjectURL(blob);
+			const anchor = document.createElement("a");
+			anchor.href = url;
+			anchor.download =
+				selected.length === 1
+					? `thread-visualizer-${selected[0].name.replace(/[^a-zA-Z0-9_-]+/g, "_")}.json`
+					: "thread-visualizer-workspaces.json";
+			anchor.click();
+			URL.revokeObjectURL(url);
+		},
+		[state.workspaces]
+	);
 
 	return {
 		threads,
@@ -509,6 +580,7 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		fileInputRef,
 		importState,
 		openImportPicker,
+		exportWorkspaces,
 
 		pushUndoSnapshot,
 	};

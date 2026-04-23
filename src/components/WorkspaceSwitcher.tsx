@@ -11,36 +11,31 @@ const SwitcherRoot = styled.div`
 	position: relative;
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
 `;
 
 const ActiveButton = styled.button`
 	appearance: none;
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	border: 1px solid ${palette.borderStrong};
-	border-radius: 12px;
-	background: ${palette.actionSurface};
+	gap: 4px;
+	border: 1px solid ${palette.border};
+	background: ${palette.surface};
 	color: ${palette.text};
-	padding: 6px 12px;
-	font-size: 0.85rem;
+	padding: 3px 8px;
+	font-size: 0.75rem;
 	font-weight: 600;
-	line-height: 1.3;
+	line-height: 1.4;
 	cursor: pointer;
-	max-width: 24rem;
-	transition:
-		background-color 120ms ease,
-		border-color 120ms ease;
+	min-width: 260px;
+	max-width: 520px;
 
 	&:hover {
-		background: ${palette.actionSurfaceHover};
+		background: ${palette.surfaceHover};
 	}
 
 	&:focus-visible {
-		outline: none;
-		border-color: #7f6440;
-		box-shadow: 0 0 0 3px ${palette.focusRing};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
 	}
 `;
 
@@ -52,62 +47,50 @@ const ActiveName = styled.span`
 
 const Chevron = styled.span`
 	flex-shrink: 0;
-	font-size: 0.6rem;
-	opacity: 0.6;
-	transition: transform 120ms ease;
-
-	&[data-open="true"] {
-		transform: rotate(180deg);
-	}
+	font-size: 0.55rem;
+	margin-left: auto;
+	opacity: 0.5;
 `;
 
 const Dropdown = styled.div`
 	position: absolute;
-	top: calc(100% + 4px);
+	top: calc(100% + 2px);
 	left: 0;
 	z-index: 100;
-	min-width: 280px;
-	max-width: 420px;
-	max-height: 420px;
+	min-width: 320px;
+	max-width: 520px;
+	max-height: 400px;
 	overflow-y: auto;
 	border: 1px solid ${palette.border};
-	border-radius: 14px;
 	background: ${palette.surface};
 	box-shadow: ${palette.shadow};
-	padding: 6px;
+	padding: 4px;
 `;
 
-const WorkspaceItem = styled.button`
-	appearance: none;
+const WorkspaceItem = styled.div`
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 6px;
 	width: 100%;
-	border: 0;
-	border-radius: 10px;
 	background: transparent;
 	color: ${palette.text};
-	padding: 8px 10px;
-	font-size: 0.82rem;
-	font-weight: 500;
-	line-height: 1.3;
+	padding: 5px 8px;
+	font-size: 0.75rem;
 	text-align: left;
 	cursor: pointer;
-	transition: background-color 80ms ease;
 
 	&:hover {
-		background: ${palette.pageBackgroundAccent};
+		background: ${palette.surfaceHover};
 	}
 
 	&:focus-visible {
-		outline: none;
-		background: ${palette.pageBackgroundAccent};
-		box-shadow: inset 0 0 0 2px ${palette.focusRing};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
 	}
 
 	&[data-active="true"] {
-		background: color-mix(in srgb, ${palette.actionSurfaceHover} 60%, white);
-		font-weight: 700;
+		background: ${palette.surfaceHover};
+		font-weight: 600;
 	}
 `;
 
@@ -123,15 +106,14 @@ const ItemName = styled.div`
 `;
 
 const ItemMeta = styled.div`
-	margin-top: 2px;
-	font-size: 0.7rem;
-	font-weight: 400;
+	margin-top: 1px;
+	font-size: 0.65rem;
 	color: ${palette.mutedText};
 `;
 
 const ItemActions = styled.div`
 	display: flex;
-	gap: 2px;
+	gap: 1px;
 	flex-shrink: 0;
 `;
 
@@ -140,38 +122,34 @@ const ItemAction = styled.button`
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	min-width: 24px;
-	min-height: 24px;
+	min-width: 20px;
+	min-height: 20px;
 	border: 0;
-	border-radius: 6px;
 	background: transparent;
 	color: ${palette.mutedText};
-	padding: 0 4px;
-	font-size: 0.75rem;
+	padding: 0 3px;
+	font-size: 0.7rem;
 	cursor: pointer;
-	transition:
-		background-color 80ms ease,
-		color 80ms ease;
 
 	&:hover {
-		background: ${palette.actionSurfaceHover};
+		background: ${palette.surfaceHover};
 		color: ${palette.text};
 	}
 
 	&:focus-visible {
-		outline: none;
-		box-shadow: 0 0 0 2px ${palette.focusRing};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
 	}
 
 	&:disabled {
 		opacity: 0.35;
-		cursor: not-allowed;
+		cursor: default;
 	}
 `;
 
 const DropdownDivider = styled.div`
 	height: 1px;
-	margin: 4px 6px;
+	margin: 3px 4px;
 	background: ${palette.border};
 `;
 
@@ -179,51 +157,73 @@ const DropdownAction = styled.button`
 	appearance: none;
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
 	width: 100%;
 	border: 0;
-	border-radius: 10px;
 	background: transparent;
 	color: ${palette.text};
-	padding: 8px 10px;
-	font-size: 0.82rem;
-	font-weight: 500;
-	line-height: 1.3;
+	padding: 5px 8px;
+	font-size: 0.75rem;
 	text-align: left;
 	cursor: pointer;
-	transition: background-color 80ms ease;
 
 	&:hover {
-		background: ${palette.pageBackgroundAccent};
+		background: ${palette.surfaceHover};
 	}
 
 	&:focus-visible {
-		outline: none;
-		background: ${palette.pageBackgroundAccent};
-		box-shadow: inset 0 0 0 2px ${palette.focusRing};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
 	}
 `;
 
 const RenameInput = styled.input`
 	appearance: none;
-	box-sizing: border-box;
 	flex: 1;
 	min-width: 0;
-	border: 0;
-	border-radius: 6px;
-	background: color-mix(in srgb, ${palette.surfaceSoft} 72%, white);
+	border: 1px solid ${palette.border};
+	background: ${palette.surface};
 	color: ${palette.text};
-	padding: 4px 8px;
-	font-size: 0.82rem;
+	padding: 2px 6px;
+	font-size: 0.75rem;
 	font-weight: 600;
-	line-height: 1.3;
-	box-shadow: inset 0 0 0 1px ${palette.borderStrong};
 
 	&:focus-visible {
-		outline: none;
-		box-shadow:
-			inset 0 0 0 1px ${palette.borderStrong},
-			0 0 0 3px ${palette.focusRing};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
+	}
+`;
+
+const ExportCheckbox = styled.input`
+	margin: 0 4px 0 0;
+	cursor: pointer;
+`;
+
+const ExportBar = styled.div`
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 8px;
+`;
+
+const ExportButton = styled.button`
+	appearance: none;
+	border: 1px solid ${palette.border};
+	background: ${palette.surface};
+	color: ${palette.text};
+	padding: 2px 8px;
+	font-size: 0.7rem;
+	cursor: pointer;
+	margin-left: auto;
+	white-space: nowrap;
+
+	&:hover {
+		background: ${palette.surfaceHover};
+	}
+
+	&:disabled {
+		opacity: 0.4;
+		cursor: default;
 	}
 `;
 
@@ -271,6 +271,8 @@ type WorkspaceSwitcherProps = {
 	onDuplicate: () => void;
 	onRename: (name: string) => void;
 	onDelete: (workspaceId: string) => void;
+	onExport: (workspaceIds: string[]) => void;
+	onImport: () => void;
 };
 
 export function WorkspaceSwitcher({
@@ -281,10 +283,14 @@ export function WorkspaceSwitcher({
 	onDuplicate,
 	onRename,
 	onDelete,
+	onExport,
+	onImport,
 }: WorkspaceSwitcherProps) {
 	const [isOpen, setIsOpen] = useState(false);
 	const [renamingId, setRenamingId] = useState<string | null>(null);
 	const [renameDraft, setRenameDraft] = useState("");
+	const [exportSelection, setExportSelection] = useState<Set<string>>(new Set());
+	const [isExportMode, setIsExportMode] = useState(false);
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const renameInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -298,6 +304,7 @@ export function WorkspaceSwitcher({
 			if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
 				setIsOpen(false);
 				setRenamingId(null);
+				setIsExportMode(false);
 			}
 		};
 
@@ -348,6 +355,18 @@ export function WorkspaceSwitcher({
 	};
 
 	const handleSelect = (workspaceId: string) => {
+		if (isExportMode) {
+			setExportSelection((prev) => {
+				const next = new Set(prev);
+				if (next.has(workspaceId)) {
+					next.delete(workspaceId);
+				} else {
+					next.add(workspaceId);
+				}
+				return next;
+			});
+			return;
+		}
 		onSwitch(workspaceId);
 		setIsOpen(false);
 		setRenamingId(null);
@@ -363,7 +382,27 @@ export function WorkspaceSwitcher({
 		setIsOpen(false);
 	};
 
-	const sortedWorkspaces = [...workspaces].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+	const toggleExportMode = () => {
+		setIsExportMode((prev) => {
+			if (!prev) {
+				setExportSelection(new Set([activeWorkspace.id]));
+			}
+			return !prev;
+		});
+	};
+
+	const handleExport = () => {
+		if (exportSelection.size > 0) {
+			onExport([...exportSelection]);
+		}
+		setIsExportMode(false);
+		setExportSelection(new Set());
+		setIsOpen(false);
+	};
+
+	const sortedWorkspaces = [...workspaces].sort((a, b) =>
+		a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+	);
 
 	return (
 		<SwitcherRoot ref={rootRef}>
@@ -385,7 +424,6 @@ export function WorkspaceSwitcher({
 						return (
 							<WorkspaceItem
 								key={workspace.id}
-								type="button"
 								data-active={isActive}
 								onClick={() => {
 									if (!isRenaming) {
@@ -393,6 +431,14 @@ export function WorkspaceSwitcher({
 									}
 								}}
 							>
+								{isExportMode && (
+									<ExportCheckbox
+										type="checkbox"
+										checked={exportSelection.has(workspace.id)}
+										onChange={() => handleSelect(workspace.id)}
+										onClick={(e) => e.stopPropagation()}
+									/>
+								)}
 								<ItemContent>
 									{isRenaming ? (
 										<RenameInput
@@ -417,7 +463,7 @@ export function WorkspaceSwitcher({
 								</ItemContent>
 
 								<ItemActions>
-									{isActive && !isRenaming && (
+									{isActive && !isRenaming && !isExportMode && (
 										<ItemAction
 											type="button"
 											title="Rename"
@@ -429,17 +475,19 @@ export function WorkspaceSwitcher({
 											✎
 										</ItemAction>
 									)}
-									<ItemAction
-										type="button"
-										title="Delete workspace"
-										disabled={workspaces.length <= 1}
-										onClick={(e) => {
-											e.stopPropagation();
-											onDelete(workspace.id);
-										}}
-									>
-										✕
-									</ItemAction>
+									{!isExportMode && (
+										<ItemAction
+											type="button"
+											title="Delete workspace"
+											disabled={workspaces.length <= 1}
+											onClick={(e) => {
+												e.stopPropagation();
+												onDelete(workspace.id);
+											}}
+										>
+											✕
+										</ItemAction>
+									)}
 								</ItemActions>
 							</WorkspaceItem>
 						);
@@ -447,13 +495,46 @@ export function WorkspaceSwitcher({
 
 					<DropdownDivider />
 
-					<DropdownAction type="button" onClick={handleCreate}>
-						+ New workspace
-					</DropdownAction>
+					{isExportMode ? (
+						<ExportBar>
+							<DropdownAction type="button" onClick={toggleExportMode}>
+								Cancel
+							</DropdownAction>
+							<ExportButton
+								type="button"
+								disabled={exportSelection.size === 0}
+								onClick={handleExport}
+							>
+								Export {exportSelection.size > 0 ? `(${exportSelection.size})` : ""}
+							</ExportButton>
+						</ExportBar>
+					) : (
+						<>
+							<DropdownAction type="button" onClick={handleCreate}>
+								+ New workspace
+							</DropdownAction>
 
-					<DropdownAction type="button" onClick={handleDuplicate}>
-						⧉ Duplicate current
-					</DropdownAction>
+							<DropdownAction type="button" onClick={handleDuplicate}>
+								⧉ Duplicate current
+							</DropdownAction>
+
+							<DropdownDivider />
+
+							<DropdownAction type="button" onClick={toggleExportMode}>
+								↓ Export…
+							</DropdownAction>
+
+							<DropdownAction
+								type="button"
+								onClick={() => {
+									onImport();
+									setIsOpen(false);
+								}}
+							>
+								↑ Import…
+							</DropdownAction>
+						</>
+					)}
 				</Dropdown>
 			)}
 		</SwitcherRoot>

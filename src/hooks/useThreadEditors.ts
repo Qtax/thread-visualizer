@@ -84,6 +84,13 @@ export function useThreadEditors(
 		...Object.values(contentHeights).filter((value) => Number.isFinite(value))
 	);
 
+	// Clear the connector overlay immediately when switching workspaces so stale
+	// arrows don't flash before the new layout is computed.
+	const threadIdKey = threads.map((t) => t.id).join(",");
+	useLayoutEffect(() => {
+		setConnectorOverlay(EMPTY_CONNECTOR_OVERLAY);
+	}, [threadIdKey]);
+
 	const syncEditorFontSize = useCallback((editor: Monaco.editor.IStandaloneCodeEditor) => {
 		const layoutInfo = editor.getLayoutInfo();
 		const useCompactTypography =

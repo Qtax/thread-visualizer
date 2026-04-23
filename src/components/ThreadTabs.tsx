@@ -29,23 +29,14 @@ const TabShell = styled.div`
 	gap: 1px;
 	border: 1px solid ${palette.border};
 	border-bottom: 0;
-	border-radius: 5px 5px 0 0;
-	background: linear-gradient(
-		180deg,
-		color-mix(in srgb, ${palette.surfaceSoft} 80%, white) 0%,
-		${palette.surface} 100%
-	);
+	background: ${palette.surface};
 	padding-left: 8px;
 	margin-bottom: -1px;
 	overflow: hidden;
 	cursor: grab;
 
 	&[data-dragging="true"] {
-		opacity: 0.52;
-	}
-
-	&:focus-within {
-		background: ${palette.surface};
+		opacity: 0.5;
 	}
 
 	&:active {
@@ -70,28 +61,21 @@ const TabLabel = styled.span`
 
 const TabNameField = styled.input`
 	appearance: none;
-	box-sizing: border-box;
 	flex: 0 1 18ch;
 	min-width: 0;
 	width: 18ch;
-	height: 28px;
+	height: 24px;
 	max-width: 100%;
-	border: 0;
-	border-radius: 4px;
-	background: color-mix(in srgb, ${palette.surfaceSoft} 72%, white);
+	border: 1px solid ${palette.border};
+	background: ${palette.surface};
 	color: ${palette.text};
-	padding: 4px 6px;
+	padding: 2px 6px;
 	margin: 0 2px 0 0;
-	font-size: 0.78rem;
-	font-weight: 500;
-	line-height: 1.2;
-	box-shadow: inset 0 0 0 1px color-mix(in srgb, ${palette.borderStrong} 78%, white);
+	font-size: 0.75rem;
 
 	&:focus-visible {
-		outline: none;
-		box-shadow:
-			inset 0 0 0 1px ${palette.borderStrong},
-			0 0 0 3px ${palette.focusRing};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
 	}
 
 	&::placeholder {
@@ -112,56 +96,37 @@ const TabActionButton = styled.button`
 	align-items: center;
 	justify-content: center;
 	flex: 0 0 auto;
-	min-width: 22px;
-	min-height: 22px;
+	min-width: 20px;
+	min-height: 20px;
 	border: 0;
-	border-radius: 4px;
 	background: transparent;
 	color: ${palette.mutedText};
-	padding: 0 6px;
-	font-size: 0.8rem;
-	line-height: 1;
-	transition:
-		background-color 120ms ease,
-		color 120ms ease;
+	padding: 0 4px;
+	font-size: 0.75rem;
+	cursor: pointer;
 
 	&:hover:not(:disabled) {
-		background: ${palette.pageBackgroundAccent};
+		background: ${palette.surfaceHover};
 		color: ${palette.text};
 	}
 
 	&:focus-visible {
-		outline: none;
-		background: color-mix(in srgb, ${palette.surfaceSoft} 70%, white);
-		box-shadow: 0 0 0 3px ${palette.focusRing};
-		color: ${palette.text};
+		outline: 2px solid ${palette.focusRing};
+		outline-offset: -1px;
 	}
 
 	&:disabled {
-		cursor: not-allowed;
-		opacity: 0.45;
+		opacity: 0.4;
+		cursor: default;
 	}
-`;
-
-const AddTabButton = styled(TabActionButton)`
-	position: absolute;
-	right: 0;
-	bottom: 1px;
-	z-index: 1;
-	min-width: 30px;
-	min-height: 30px;
-	border-radius: 0;
-	font-size: 1rem;
-	color: ${palette.text};
 `;
 
 const DropIndicator = styled.div`
 	position: absolute;
 	top: 8px;
 	bottom: 6px;
-	width: 3px;
-	border-radius: 999px;
-	background: ${palette.borderStrong};
+	width: 2px;
+	background: ${palette.text};
 	pointer-events: none;
 	z-index: 10;
 `;
@@ -177,7 +142,6 @@ type ThreadTabsProps = {
 	onDrop: (nextIndex: number) => void;
 	onNameChange: (threadId: string, nextName: string) => void;
 	onRemove: (threadId: string) => void;
-	onAddThread: () => void;
 };
 
 function resolveDropIndex(event: DragEvent<HTMLDivElement>, index: number) {
@@ -196,7 +160,6 @@ export function ThreadTabs({
 	onDrop,
 	onNameChange,
 	onRemove,
-	onAddThread,
 }: ThreadTabsProps) {
 	const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
 	const [draftName, setDraftName] = useState("");
@@ -257,12 +220,10 @@ export function ThreadTabs({
 				const showLeftIndicator = dropIndex === index;
 				const showRightIndicator =
 					index === threads.length - 1 && dropIndex === threads.length;
-				const isLastThread = index === threads.length - 1;
 
 				return (
 					<TabLane
 						key={thread.id}
-						style={isLastThread ? { paddingRight: 36 } : undefined}
 						draggable={!isEditing}
 						onDragStart={(event) => {
 							event.dataTransfer.effectAllowed = "move";
@@ -326,10 +287,6 @@ export function ThreadTabs({
 					</TabLane>
 				);
 			})}
-
-			<AddTabButton type="button" onClick={onAddThread} title="Add thread">
-				+
-			</AddTabButton>
 		</TabStrip>
 	);
 }
