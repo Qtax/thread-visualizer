@@ -71,6 +71,9 @@ export function useThreadEditors(
 	const decorationCollectionsRef = useRef<
 		Record<string, Monaco.editor.IEditorDecorationsCollection | null>
 	>({});
+	const selectionHighlightCollectionsRef = useRef<
+		Record<string, Monaco.editor.IEditorDecorationsCollection | null>
+	>({});
 	const applyViewZonesRef = useRef<() => void>(() => {});
 	const isApplyingZonesRef = useRef(false);
 	const pendingApplyViewZonesRef = useRef(false);
@@ -119,6 +122,46 @@ export function useThreadEditors(
 						[threadId]: measuredHeight,
 					};
 		});
+	}, []);
+
+	const applySelectionHighlights = useCallback((selectedText: string) => {
+		const monaco = monacoRef.current;
+		if (!monaco) {
+			return;
+		}
+
+		const trimmed = selectedText;
+		const hasSelection = trimmed.length >= 2 && !trimmed.includes("\n");
+
+		for (const [threadId, editor] of Object.entries(editorsRef.current)) {
+			if (!editor) {
+				continue;
+			}
+
+			const collection =
+				selectionHighlightCollectionsRef.current[threadId] ??
+				editor.createDecorationsCollection([]);
+			selectionHighlightCollectionsRef.current[threadId] = collection;
+
+			if (!hasSelection) {
+				collection.set([]);
+				continue;
+			}
+
+			const model = editor.getModel();
+			if (!model) {
+				collection.set([]);
+				continue;
+			}
+
+			const matches = model.findMatches(trimmed, false, false, false, null, false);
+			collection.set(
+				matches.map((match) => ({
+					range: match.range,
+					options: { className: "selection-highlight" },
+				}))
+			);
+		}
 	}, []);
 
 	const applySyncDecorations = useCallback((threadId: string, code: string) => {
@@ -404,6 +447,12 @@ export function useThreadEditors(
 			}
 		});
 
+		Object.keys(selectionHighlightCollectionsRef.current).forEach((threadId) => {
+			if (!activeThreadIds.has(threadId)) {
+				delete selectionHighlightCollectionsRef.current[threadId];
+			}
+		});
+
 		setContentHeights((current) => {
 			const nextEntries = Object.entries(current).filter(([threadId]) =>
 				activeThreadIds.has(threadId)
@@ -478,6 +527,16 @@ export function useThreadEditors(
 					}
 				});
 
+				editor.onDidChangeCursorSelection(() => {
+					const selection = editor.getSelection();
+					const model = editor.getModel();
+					if (selection && model && !selection.isEmpty()) {
+						applySelectionHighlights(model.getValueInRange(selection));
+					} else {
+						applySelectionHighlights("");
+					}
+				});
+
 				editor.onKeyDown((event) => {
 					if (event.keyCode !== monaco.KeyCode.Tab) {
 						return;
@@ -517,7 +576,14 @@ export function useThreadEditors(
 				);
 				applyViewZones();
 			},
-		[applySyncDecorations, applyViewZones, syncEditorFontSize, syncEditorHeight, threads]
+		[
+			applySyncDecorations,
+			applySelectionHighlights,
+			applyViewZones,
+			syncEditorFontSize,
+			syncEditorHeight,
+			threads,
+		]
 	);
 
 	return {

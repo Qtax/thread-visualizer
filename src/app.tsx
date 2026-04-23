@@ -48,6 +48,11 @@ const syncDecorationStyles = css`
 	:global(.monaco-editor .sync-inline-tag--set) {
 		--sync-decoration-color: var(--sync-decoration-color-set);
 	}
+
+	:global(.monaco-editor .selection-highlight) {
+		background: rgba(0, 120, 215, 0.15);
+		border-radius: 2px;
+	}
 `;
 
 const ThreadCanvasViewport = styled.div`
