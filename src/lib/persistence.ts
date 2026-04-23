@@ -55,6 +55,7 @@ function createInitialThreads(): Thread[] {
 			code: [
 				"Add and remove threads from the tab bar.",
 				"Move the threads by dragging the tabs.",
+				"# Anything after # is treated as a comment",
 				"",
 				"── [sync] mutual alignment ──",
 				"load config",

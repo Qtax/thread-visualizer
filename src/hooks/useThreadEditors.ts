@@ -10,6 +10,7 @@ import {
 	addViewZone,
 	clearViewZones,
 	collectMatchedSyncGroups,
+	collectLineCommentDecorations,
 	collectSyncLineDecorations,
 	collectSyncMarkers,
 	collectSyncTagDecorations,
@@ -209,6 +210,7 @@ export function useThreadEditors(
 
 		const lineDecorations = collectSyncLineDecorations(code);
 		const inlineTagDecorations = collectSyncTagDecorations(code);
+		const commentDecorations = collectLineCommentDecorations(code);
 		collection.set([
 			...lineDecorations.map(({ kind, lineNumber }) => ({
 				range: new monaco.Range(lineNumber, 1, lineNumber, 1),
@@ -221,6 +223,13 @@ export function useThreadEditors(
 				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
 				options: {
 					inlineClassName: getSyncInlineTagClassName(kind),
+				},
+			})),
+			...commentDecorations.map(({ lineNumber, startColumn, endColumn }) => ({
+				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
+				options: {
+					inlineClassName: "line-comment-decoration",
+					stickiness: monaco.editor.TrackedRangeStickiness.AlwaysGrowsWhenTypingAtEdges,
 				},
 			})),
 		]);

@@ -15,6 +15,15 @@ import type {
 
 export const SYNC_PATTERN = /\[(sync|wait|set)\s+([^\]]+?)\]/gi;
 
+function getLineCommentStart(line: string): number {
+	return line.indexOf("#");
+}
+
+function getLineCodeSegment(line: string): string {
+	const commentStart = getLineCommentStart(line);
+	return commentStart === -1 ? line : line.slice(0, commentStart);
+}
+
 export function getSyncDecorationClassName(kind: SyncTagKind): string {
 	switch (kind) {
 		case "wait":
@@ -43,7 +52,7 @@ export function parseFirstSyncs(text: string): SyncOccurrence[] {
 	const occurrences: SyncOccurrence[] = [];
 
 	for (let index = 0; index < lines.length; index += 1) {
-		const line = lines[index];
+		const line = getLineCodeSegment(lines[index]);
 		const matcher = new RegExp(SYNC_PATTERN);
 		let match: RegExpExecArray | null = null;
 
@@ -66,10 +75,11 @@ export function collectSyncMarkers(text: string): SyncMarker[] {
 	const markers: SyncMarker[] = [];
 
 	lines.forEach((line, index) => {
+		const codeSegment = getLineCodeSegment(line);
 		const matcher = new RegExp(SYNC_PATTERN.source, SYNC_PATTERN.flags);
 		let match: RegExpExecArray | null = null;
 
-		while ((match = matcher.exec(line)) !== null) {
+		while ((match = matcher.exec(codeSegment)) !== null) {
 			const id = match[2].trim();
 			if (!id) {
 				continue;
@@ -91,10 +101,11 @@ export function collectSyncTagDecorations(text: string): SyncTagDecoration[] {
 	const decorations: SyncTagDecoration[] = [];
 
 	lines.forEach((line, index) => {
+		const codeSegment = getLineCodeSegment(line);
 		const matcher = new RegExp(SYNC_PATTERN.source, SYNC_PATTERN.flags);
 		let match: RegExpExecArray | null = null;
 
-		while ((match = matcher.exec(line)) !== null) {
+		while ((match = matcher.exec(codeSegment)) !== null) {
 			const fullMatch = match[0];
 			const id = match[2].trim();
 			if (!id) {
@@ -108,6 +119,34 @@ export function collectSyncTagDecorations(text: string): SyncTagDecoration[] {
 				endColumn: match.index + fullMatch.length + 1,
 			});
 		}
+	});
+
+	return decorations;
+}
+
+export function collectLineCommentDecorations(text: string): Array<{
+	lineNumber: number;
+	startColumn: number;
+	endColumn: number;
+}> {
+	const lines = text.split(/\r?\n/);
+	const decorations: Array<{
+		lineNumber: number;
+		startColumn: number;
+		endColumn: number;
+	}> = [];
+
+	lines.forEach((line, index) => {
+		const commentStart = getLineCommentStart(line);
+		if (commentStart === -1) {
+			return;
+		}
+
+		decorations.push({
+			lineNumber: index + 1,
+			startColumn: commentStart + 1,
+			endColumn: line.length + 1,
+		});
 	});
 
 	return decorations;

@@ -53,6 +53,10 @@ const syncDecorationStyles = css`
 		background: rgba(0, 120, 215, 0.15);
 		border-radius: 2px;
 	}
+
+	:global(.monaco-editor .line-comment-decoration) {
+		color: color-mix(in srgb, currentColor 40%, white);
+	}
 `;
 
 const ThreadCanvasViewport = styled.div`
