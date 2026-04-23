@@ -378,27 +378,6 @@ function getAccumulatedOffset(
 	return total;
 }
 
-function mergeZoneAdjustment(
-	current: ZoneAdjustment | undefined,
-	addition: ZoneAdjustment
-): ZoneAdjustment {
-	if (!current) {
-		return addition;
-	}
-
-	if (current.placement === addition.placement && current.kind === addition.kind) {
-		return {
-			...current,
-			height: current.height + addition.height,
-		};
-	}
-
-	return {
-		...current,
-		height: current.height + addition.height,
-	};
-}
-
 function buildZoneAdjustment(kind: SyncTagKind, height: number): ZoneAdjustment {
 	return {
 		height,
@@ -412,106 +391,193 @@ export function computeAlignmentPlanFromBaseTops(
 	baseTops: Record<string, Record<number, number>>
 ): ZonePlan {
 	const threadIds = Object.keys(baseTops);
-	const plan: ZonePlan = Object.fromEntries(threadIds.map((threadId) => [threadId, {}]));
-	const getCurrentTop = ({ threadId, lineNumber }: SyncGroupOccurrence) => {
-		const baseTop = baseTops[threadId]?.[lineNumber];
+	const emptyPlan = (): ZonePlan =>
+		Object.fromEntries(threadIds.map((threadId) => [threadId, {}]));
+
+	const effectiveTop = (occurrence: SyncGroupOccurrence, plan: ZonePlan): number | undefined => {
+		const baseTop = baseTops[occurrence.threadId]?.[occurrence.lineNumber];
 		if (baseTop === undefined) {
 			return undefined;
 		}
 
-		const currentAdjustment = plan[threadId]?.[lineNumber];
-		return (
-			baseTop +
-			getAccumulatedOffset(plan[threadId], lineNumber) +
-			(currentAdjustment?.placement === "after" ? currentAdjustment.height : 0)
-		);
+		const threadPlan = plan[occurrence.threadId] ?? {};
+		let total = baseTop + getAccumulatedOffset(threadPlan, occurrence.lineNumber);
+		const ownAdjustment = threadPlan[occurrence.lineNumber];
+		if (ownAdjustment?.placement === "after") {
+			total += ownAdjustment.height;
+		}
+		return total;
 	};
-	const applyDelta = (occurrence: SyncGroupOccurrence, delta: number) => {
-		if (delta <= 0.5) {
+
+	const baseTopExcludingOwn = (
+		occurrence: SyncGroupOccurrence,
+		plan: ZonePlan
+	): number | undefined => {
+		const baseTop = baseTops[occurrence.threadId]?.[occurrence.lineNumber];
+		if (baseTop === undefined) {
+			return undefined;
+		}
+
+		const threadPlan = plan[occurrence.threadId] ?? {};
+		let total = baseTop;
+		for (const [rawLine, adjustment] of Object.entries(threadPlan)) {
+			const line = Number(rawLine);
+			if (line < occurrence.lineNumber) {
+				total += adjustment.height;
+			}
+		}
+		return total;
+	};
+
+	const recordZone = (nextPlan: ZonePlan, occurrence: SyncGroupOccurrence, height: number) => {
+		if (height <= 0.5) {
 			return;
 		}
 
-		const threadPlan = plan[occurrence.threadId];
-		threadPlan[occurrence.lineNumber] = mergeZoneAdjustment(
-			threadPlan[occurrence.lineNumber],
-			buildZoneAdjustment(occurrence.kind, delta)
-		);
+		const adjustment = buildZoneAdjustment(occurrence.kind, height);
+		const threadPlan = nextPlan[occurrence.threadId];
+		const existing = threadPlan[occurrence.lineNumber];
+		// Multiple constraints at the same (thread, line) are satisfied by a
+		// single zone of the maximum required height (not the sum) so iterating
+		// to a fixed point cannot diverge.
+		if (!existing || existing.height < adjustment.height) {
+			threadPlan[occurrence.lineNumber] = adjustment;
+		}
 	};
-	const applyAlignment = (occurrences: SyncGroupOccurrence[]) => {
-		const measurable = occurrences
-			.map((occurrence) => ({
-				occurrence,
-				top: getCurrentTop(occurrence),
-			}))
-			.filter(
-				(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
-					entry.top !== undefined
+
+	const computeNextPlan = (prevPlan: ZonePlan): ZonePlan => {
+		const nextPlan = emptyPlan();
+
+		groups.forEach((group) => {
+			if (group.strategy === "align-all") {
+				const measurable = group.occurrences
+					.map((occurrence) => ({
+						occurrence,
+						top: effectiveTop(occurrence, prevPlan),
+					}))
+					.filter(
+						(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
+							entry.top !== undefined
+					);
+
+				if (measurable.length < 2) {
+					return;
+				}
+
+				const targetTop = Math.max(...measurable.map((entry) => entry.top));
+
+				measurable.forEach(({ occurrence }) => {
+					const baseExcl = baseTopExcludingOwn(occurrence, prevPlan);
+					if (baseExcl === undefined) {
+						return;
+					}
+					recordZone(nextPlan, occurrence, targetTop - baseExcl);
+				});
+				return;
+			}
+
+			const waitOccurrences = group.occurrences.filter(
+				(occurrence) => occurrence.kind === "wait"
+			);
+			if (waitOccurrences.length === 0) {
+				return;
+			}
+
+			const measurableSets = group.occurrences
+				.filter((occurrence) => occurrence.kind === "set")
+				.map((occurrence) => ({
+					occurrence,
+					top: effectiveTop(occurrence, prevPlan),
+				}))
+				.filter(
+					(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
+						entry.top !== undefined
+				);
+
+			if (measurableSets.length === 0) {
+				const measurableWaits = waitOccurrences
+					.map((occurrence) => ({
+						occurrence,
+						top: effectiveTop(occurrence, prevPlan),
+					}))
+					.filter(
+						(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
+							entry.top !== undefined
+					);
+
+				if (measurableWaits.length < 2) {
+					return;
+				}
+
+				const targetTop = Math.max(...measurableWaits.map((entry) => entry.top));
+
+				measurableWaits.forEach(({ occurrence }) => {
+					const baseExcl = baseTopExcludingOwn(occurrence, prevPlan);
+					if (baseExcl === undefined) {
+						return;
+					}
+					recordZone(nextPlan, occurrence, targetTop - baseExcl);
+				});
+				return;
+			}
+
+			// Anchor = the first-in-time set (smallest current top). Only the first
+			// set matters; later sets do not constrain waits.
+			const anchorSet = measurableSets.reduce((best, current) =>
+				current.top < best.top ? current : best
 			);
 
-		if (measurable.length < 2) {
-			return;
-		}
-
-		const targetTop = Math.max(...measurable.map((entry) => entry.top));
-
-		measurable.forEach(({ occurrence, top }) => {
-			applyDelta(occurrence, targetTop - top);
+			waitOccurrences.forEach((occurrence) => {
+				const baseExcl = baseTopExcludingOwn(occurrence, prevPlan);
+				if (baseExcl === undefined) {
+					return;
+				}
+				// Each wait extends independently to reach the first-in-time set.
+				// If the wait would already be at or past the anchor set,
+				// the required height is <= 0 and recordZone no-ops.
+				recordZone(nextPlan, occurrence, anchorSet.top - baseExcl);
+			});
 		});
+
+		return nextPlan;
 	};
 
-	groups.forEach((group) => {
-		if (group.strategy === "align-all") {
-			applyAlignment(group.occurrences);
-			return;
+	const plansEqual = (a: ZonePlan, b: ZonePlan): boolean => {
+		for (const threadId of threadIds) {
+			const lhs = a[threadId] ?? {};
+			const rhs = b[threadId] ?? {};
+			const lhsKeys = Object.keys(lhs);
+			const rhsKeys = Object.keys(rhs);
+			if (lhsKeys.length !== rhsKeys.length) {
+				return false;
+			}
+			for (const key of lhsKeys) {
+				const left = lhs[Number(key)];
+				const right = rhs[Number(key)];
+				if (!right) {
+					return false;
+				}
+				if (
+					Math.abs(left.height - right.height) > 0.5 ||
+					left.placement !== right.placement ||
+					left.kind !== right.kind
+				) {
+					return false;
+				}
+			}
 		}
+		return true;
+	};
 
-		const waitOccurrences = group.occurrences.filter(
-			(occurrence) => occurrence.kind === "wait"
-		);
-		if (waitOccurrences.length === 0) {
-			return;
+	let plan = emptyPlan();
+	const MAX_PASSES = 32;
+	for (let pass = 0; pass < MAX_PASSES; pass += 1) {
+		const nextPlan = computeNextPlan(plan);
+		if (plansEqual(nextPlan, plan)) {
+			return nextPlan;
 		}
-
-		const measurableWaits = waitOccurrences
-			.map((occurrence) => ({
-				occurrence,
-				top: getCurrentTop(occurrence),
-			}))
-			.filter(
-				(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
-					entry.top !== undefined
-			);
-
-		if (measurableWaits.length === 0) {
-			return;
-		}
-
-		const measurableSets = group.occurrences
-			.filter((occurrence) => occurrence.kind === "set")
-			.map((occurrence) => ({
-				occurrence,
-				top: getCurrentTop(occurrence),
-			}))
-			.filter(
-				(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
-					entry.top !== undefined
-			);
-
-		if (measurableSets.length === 0) {
-			applyAlignment(waitOccurrences);
-			return;
-		}
-
-		const anchorSet = measurableSets.reduce((best, current) =>
-			current.top < best.top ? current : best
-		);
-		const targetTop = Math.max(anchorSet.top, ...measurableWaits.map((entry) => entry.top));
-
-		measurableWaits.forEach(({ occurrence, top }) => {
-			applyDelta(occurrence, targetTop - top);
-		});
-	});
-
+		plan = nextPlan;
+	}
 	return plan;
 }
 
