@@ -69,6 +69,23 @@ export type SavedState = {
 	threads: Thread[];
 };
 
+/** A workspace is a named collection of threads with its own undo history. */
+export type Workspace = {
+	id: string;
+	name: string;
+	createdAt: string;
+	updatedAt: string;
+	threads: Thread[];
+	undoStack: UndoEntry[];
+	redoStack: UndoEntry[];
+};
+
+/** A snapshot of the threads array at a point in time. */
+export type UndoEntry = {
+	threads: Thread[];
+	timestamp: number;
+};
+
 export type ZonePlan = Record<string, Record<number, ZoneAdjustment>>;
 export type SyncGroup = {
 	id: string;

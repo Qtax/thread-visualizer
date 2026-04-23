@@ -1,7 +1,14 @@
-import type { SavedState, Thread } from "./thread-visualizer-types";
+import type { SavedState, Thread, UndoEntry, Workspace } from "./thread-visualizer-types";
 
+// Legacy keys (read-only for migration)
 export const STORAGE_KEY = "thread-call-path-visualizer-state-v2";
 export const SAVES_STORAGE_KEY = "thread-call-path-visualizer-saves-v1";
+
+// New workspace keys
+export const WORKSPACES_STORAGE_KEY = "thread-visualizer-workspaces-v1";
+export const ACTIVE_WORKSPACE_KEY = "thread-visualizer-active-workspace-v1";
+
+export const MAX_UNDO_ENTRIES = 200;
 
 export function createCleanThreads(): Thread[] {
 	return [
@@ -50,8 +57,6 @@ function createInitialThreads(): Thread[] {
 	];
 }
 
-const INITIAL_THREADS = createInitialThreads();
-
 export function normalizeThreads(value: unknown): Thread[] | null {
 	if (!Array.isArray(value)) {
 		return null;
@@ -79,67 +84,97 @@ export function normalizeThreads(value: unknown): Thread[] | null {
 	return normalized.length > 0 ? normalized : null;
 }
 
-export function loadThreads(): Thread[] {
-	if (typeof window === "undefined") {
-		return INITIAL_THREADS;
-	}
-
-	try {
-		const raw = window.localStorage.getItem(STORAGE_KEY);
-		if (!raw) {
-			return INITIAL_THREADS;
-		}
-
-		const parsed = JSON.parse(raw) as { threads?: unknown };
-		return normalizeThreads(parsed.threads) ?? INITIAL_THREADS;
-	} catch {
-		return INITIAL_THREADS;
-	}
-}
-
-export function normalizeSavedStates(value: unknown): SavedState[] {
+function normalizeUndoEntries(value: unknown): UndoEntry[] {
 	if (!Array.isArray(value)) {
 		return [];
 	}
 
 	return value
+		.filter(
+			(item): item is { threads: unknown; timestamp: number } =>
+				!!item &&
+				typeof item === "object" &&
+				"threads" in item &&
+				typeof (item as { timestamp?: unknown }).timestamp === "number"
+		)
 		.map((item) => {
-			if (!item || typeof item !== "object") {
-				return null;
-			}
-
-			const candidate = item as Partial<SavedState>;
-			const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
-			const threads = normalizeThreads(candidate.threads);
-			if (!name || !threads) {
-				return null;
-			}
-
-			const createdAt =
-				typeof candidate.createdAt === "string" && candidate.createdAt
-					? candidate.createdAt
-					: new Date().toISOString();
-			const updatedAt =
-				typeof candidate.updatedAt === "string" && candidate.updatedAt
-					? candidate.updatedAt
-					: createdAt;
-
-			return {
-				id:
-					typeof candidate.id === "string" && candidate.id.trim().length > 0
-						? candidate.id
-						: crypto.randomUUID(),
-				name,
-				createdAt,
-				updatedAt,
-				threads,
-			} satisfies SavedState;
+			const threads = normalizeThreads(item.threads);
+			return threads ? { threads, timestamp: item.timestamp } : null;
 		})
-		.filter((item): item is SavedState => item !== null)
-		.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+		.filter((entry): entry is UndoEntry => entry !== null)
+		.slice(-MAX_UNDO_ENTRIES);
 }
 
-export function loadSavedStates(): SavedState[] {
+export function createWorkspace(name: string, threads?: Thread[]): Workspace {
+	const now = new Date().toISOString();
+	return {
+		id: crypto.randomUUID(),
+		name,
+		createdAt: now,
+		updatedAt: now,
+		threads: threads ?? createCleanThreads(),
+		undoStack: [],
+		redoStack: [],
+	};
+}
+
+function normalizeWorkspace(item: unknown): Workspace | null {
+	if (!item || typeof item !== "object") {
+		return null;
+	}
+
+	const candidate = item as Partial<Workspace>;
+	const id =
+		typeof candidate.id === "string" && candidate.id.trim().length > 0
+			? candidate.id
+			: crypto.randomUUID();
+	const name =
+		typeof candidate.name === "string" && candidate.name.trim().length > 0
+			? candidate.name.trim()
+			: "Untitled";
+	const threads = normalizeThreads(candidate.threads);
+	if (!threads) {
+		return null;
+	}
+
+	const now = new Date().toISOString();
+	const createdAt =
+		typeof candidate.createdAt === "string" && candidate.createdAt ? candidate.createdAt : now;
+	const updatedAt =
+		typeof candidate.updatedAt === "string" && candidate.updatedAt ? candidate.updatedAt : now;
+
+	return {
+		id,
+		name,
+		createdAt,
+		updatedAt,
+		threads,
+		undoStack: normalizeUndoEntries(candidate.undoStack),
+		redoStack: normalizeUndoEntries(candidate.redoStack),
+	};
+}
+
+// --- Legacy loaders (for migration) ---
+
+function loadLegacyThreads(): Thread[] | null {
+	if (typeof window === "undefined") {
+		return null;
+	}
+
+	try {
+		const raw = window.localStorage.getItem(STORAGE_KEY);
+		if (!raw) {
+			return null;
+		}
+
+		const parsed = JSON.parse(raw) as { threads?: unknown };
+		return normalizeThreads(parsed.threads);
+	} catch {
+		return null;
+	}
+}
+
+function loadLegacySavedStates(): SavedState[] {
 	if (typeof window === "undefined") {
 		return [];
 	}
@@ -151,28 +186,159 @@ export function loadSavedStates(): SavedState[] {
 		}
 
 		const parsed = JSON.parse(raw) as { saves?: unknown } | unknown;
-		if (parsed && typeof parsed === "object" && "saves" in parsed) {
-			return normalizeSavedStates((parsed as { saves?: unknown }).saves);
+		const items =
+			parsed && typeof parsed === "object" && "saves" in parsed
+				? (parsed as { saves?: unknown }).saves
+				: parsed;
+
+		if (!Array.isArray(items)) {
+			return [];
 		}
 
-		return normalizeSavedStates(parsed);
+		return items
+			.map((item) => {
+				if (!item || typeof item !== "object") {
+					return null;
+				}
+
+				const candidate = item as Partial<SavedState>;
+				const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
+				const threads = normalizeThreads(candidate.threads);
+				if (!name || !threads) {
+					return null;
+				}
+
+				const createdAt =
+					typeof candidate.createdAt === "string" && candidate.createdAt
+						? candidate.createdAt
+						: new Date().toISOString();
+				const updatedAt =
+					typeof candidate.updatedAt === "string" && candidate.updatedAt
+						? candidate.updatedAt
+						: createdAt;
+
+				return {
+					id:
+						typeof candidate.id === "string" && candidate.id.trim().length > 0
+							? candidate.id
+							: crypto.randomUUID(),
+					name,
+					createdAt,
+					updatedAt,
+					threads,
+				} satisfies SavedState;
+			})
+			.filter((item): item is SavedState => item !== null);
 	} catch {
 		return [];
 	}
 }
 
-export function persistThreads(threads: Thread[]) {
+// --- Workspace persistence ---
+
+function threadsAreEmpty(threads: Thread[]): boolean {
+	return threads.every((thread) => thread.code.trim() === "");
+}
+
+function migrateFromLegacy(): { workspaces: Workspace[]; activeId: string } {
+	const workspaces: Workspace[] = [];
+	const now = new Date().toISOString();
+
+	// Migrate saved states → workspaces
+	const savedStates = loadLegacySavedStates();
+	for (const saved of savedStates) {
+		workspaces.push({
+			id: saved.id,
+			name: saved.name,
+			createdAt: saved.createdAt,
+			updatedAt: saved.updatedAt,
+			threads: saved.threads,
+			undoStack: [],
+			redoStack: [],
+		});
+	}
+
+	// Migrate current working threads → workspace
+	const legacyThreads = loadLegacyThreads();
+	if (legacyThreads && !threadsAreEmpty(legacyThreads)) {
+		const currentWorkspace: Workspace = {
+			id: crypto.randomUUID(),
+			name: "Current",
+			createdAt: now,
+			updatedAt: now,
+			threads: legacyThreads,
+			undoStack: [],
+			redoStack: [],
+		};
+		workspaces.unshift(currentWorkspace);
+	}
+
+	// If nothing migrated, create initial workspace
+	if (workspaces.length === 0) {
+		const initial = createWorkspace("Getting started", createInitialThreads());
+		workspaces.push(initial);
+	}
+
+	const activeId = workspaces[0].id;
+	return { workspaces, activeId };
+}
+
+export function loadWorkspaces(): { workspaces: Workspace[]; activeId: string } {
+	if (typeof window === "undefined") {
+		const initial = createWorkspace("Getting started", createInitialThreads());
+		return { workspaces: [initial], activeId: initial.id };
+	}
+
+	try {
+		const raw = window.localStorage.getItem(WORKSPACES_STORAGE_KEY);
+		if (!raw) {
+			// Try migration
+			const migrated = migrateFromLegacy();
+			persistWorkspaces(migrated.workspaces);
+			persistActiveWorkspaceId(migrated.activeId);
+			return migrated;
+		}
+
+		const parsed = JSON.parse(raw) as unknown[];
+		const workspaces = parsed
+			.map(normalizeWorkspace)
+			.filter((item): item is Workspace => item !== null);
+
+		if (workspaces.length === 0) {
+			const initial = createWorkspace("Getting started", createInitialThreads());
+			return { workspaces: [initial], activeId: initial.id };
+		}
+
+		const savedActiveId = window.localStorage.getItem(ACTIVE_WORKSPACE_KEY) ?? "";
+		const activeId = workspaces.some((workspace) => workspace.id === savedActiveId)
+			? savedActiveId
+			: workspaces[0].id;
+
+		return { workspaces, activeId };
+	} catch {
+		const initial = createWorkspace("Getting started", createInitialThreads());
+		return { workspaces: [initial], activeId: initial.id };
+	}
+}
+
+export function persistWorkspaces(workspaces: Workspace[]) {
 	if (typeof window === "undefined") {
 		return;
 	}
 
-	window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ threads }));
+	window.localStorage.setItem(WORKSPACES_STORAGE_KEY, JSON.stringify(workspaces));
 }
 
-export function persistSavedStates(savedStates: SavedState[]) {
+export function persistActiveWorkspaceId(id: string) {
 	if (typeof window === "undefined") {
 		return;
 	}
 
-	window.localStorage.setItem(SAVES_STORAGE_KEY, JSON.stringify({ saves: savedStates }));
+	window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
 }
+
+function createInitialThreads_static(): Thread[] {
+	return createInitialThreads();
+}
+
+export { createInitialThreads_static as createInitialThreads };

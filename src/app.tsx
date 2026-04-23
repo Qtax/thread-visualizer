@@ -4,14 +4,12 @@ import { css } from "@linaria/core";
 import { styled } from "@linaria/react";
 
 import { ConnectorOverlay } from "./components/ConnectorOverlay";
-import { SavedStatesPanel } from "./components/SavedStatesPanel";
-import { StateJsonPanel } from "./components/StateJsonPanel";
 import { ThreadColumn } from "./components/ThreadColumn";
 import { ThreadTabs } from "./components/ThreadTabs";
 import { ThreadToolbar } from "./components/ThreadToolbar";
 import { useThreadEditors } from "./hooks/useThreadEditors";
+import { useWorkspaceManager } from "./hooks/useWorkspaceManager";
 import { SYNC_DECORATION_COLOR_VALUES } from "./lib/sync-decoration-colors";
-import { useThreadVisualizerState } from "./hooks/useThreadVisualizerState";
 import { AppSurface, WorkspaceFrame, globalStyles, palette } from "./styles/ui";
 
 const syncDecorationStyles = css`
@@ -76,32 +74,32 @@ export default function ThreadCallPathVisualizer() {
 	const [draggedThreadId, setDraggedThreadId] = useState<string | null>(null);
 	const [dropIndex, setDropIndex] = useState<number | null>(null);
 	const {
-		addThread,
-		applyStateText,
-		copyState,
-		copyStateLabel,
-		deleteSavedState,
-		fileInputRef,
-		importState,
-		isStatePanelOpen,
-		loadSavedState,
-		moveThread,
-		newCleanState,
-		openImportPicker,
-		saveActionLabel,
-		saveCurrentState,
-		saveName,
-		savedStates,
-		setSaveName,
-		setStateText,
-		showState,
-		stateText,
 		threads,
-		updateSavedState,
+		addThread,
+		removeThread,
+		moveThread,
 		updateThread,
 		updateThreadName,
-		removeThread,
-	} = useThreadVisualizerState();
+
+		workspaces,
+		activeWorkspace,
+		switchWorkspace,
+		createNewWorkspace,
+		duplicateWorkspace,
+		renameWorkspace,
+		deleteWorkspace,
+
+		undo,
+		redo,
+		canUndo,
+		canRedo,
+
+		fileInputRef,
+		importState,
+		openImportPicker,
+
+		pushUndoSnapshot,
+	} = useWorkspaceManager();
 	const threadTrackTemplate = `repeat(${threads.length}, minmax(300px, 1fr))`;
 	const {
 		connectorOverlay,
@@ -109,40 +107,27 @@ export default function ThreadCallPathVisualizer() {
 		sharedEditorHeight,
 		threadsCanvasRef,
 		threadsContentRef,
-	} = useThreadEditors(threads);
+	} = useThreadEditors(threads, pushUndoSnapshot);
 
 	return (
 		<AppSurface className={`${globalStyles} ${syncDecorationStyles}`}>
 			<WorkspaceFrame>
 				<ThreadToolbar
 					fileInputRef={fileInputRef}
-					saveName={saveName}
-					saveActionLabel={saveActionLabel}
-					isStatePanelOpen={isStatePanelOpen}
+					workspaces={workspaces}
+					activeWorkspace={activeWorkspace}
+					canUndo={canUndo}
+					canRedo={canRedo}
 					onImportState={importState}
-					onNewCleanState={newCleanState}
-					onSaveNameChange={setSaveName}
-					onSaveCurrentState={saveCurrentState}
-					onToggleState={showState}
 					onOpenImportPicker={openImportPicker}
+					onSwitchWorkspace={switchWorkspace}
+					onCreateWorkspace={createNewWorkspace}
+					onDuplicateWorkspace={duplicateWorkspace}
+					onRenameWorkspace={renameWorkspace}
+					onDeleteWorkspace={deleteWorkspace}
+					onUndo={undo}
+					onRedo={redo}
 				/>
-
-				<SavedStatesPanel
-					savedStates={savedStates}
-					onLoad={loadSavedState}
-					onUpdate={updateSavedState}
-					onDelete={deleteSavedState}
-				/>
-
-				{isStatePanelOpen && (
-					<StateJsonPanel
-						copyStateLabel={copyStateLabel}
-						stateText={stateText}
-						onCopy={copyState}
-						onApply={applyStateText}
-						onChange={setStateText}
-					/>
-				)}
 
 				<ThreadCanvasViewport>
 					<ThreadTabs

@@ -2,7 +2,9 @@ import type { ChangeEvent, MutableRefObject } from "react";
 
 import { styled } from "@linaria/react";
 
-import { ControlButton, FieldInput, HiddenFileInput, InlineCode, palette } from "../styles/ui";
+import type { Workspace } from "../lib/thread-visualizer-types";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { ControlButton, HiddenFileInput, InlineCode, palette } from "../styles/ui";
 
 const Toolbar = styled.header`
 	display: flex;
@@ -40,34 +42,44 @@ const ToolbarActions = styled.div`
 
 const ImportFileField = styled(HiddenFileInput)``;
 
-const SaveNameField = styled(FieldInput)`
-	width: 10rem;
+const UndoButton = styled(ControlButton)`
+	padding: 6px 10px;
+	font-size: 0.8rem;
+	min-width: 32px;
 `;
 
 type ThreadToolbarProps = {
 	fileInputRef: MutableRefObject<HTMLInputElement | null>;
-	saveName: string;
-	saveActionLabel: string;
-	isStatePanelOpen: boolean;
+	workspaces: Workspace[];
+	activeWorkspace: Workspace;
+	canUndo: boolean;
+	canRedo: boolean;
 	onImportState: (event: ChangeEvent<HTMLInputElement>) => void;
-	onNewCleanState: () => void;
-	onSaveNameChange: (nextValue: string) => void;
-	onSaveCurrentState: () => void;
-	onToggleState: () => void;
 	onOpenImportPicker: () => void;
+	onSwitchWorkspace: (workspaceId: string) => void;
+	onCreateWorkspace: () => void;
+	onDuplicateWorkspace: () => void;
+	onRenameWorkspace: (name: string) => void;
+	onDeleteWorkspace: (workspaceId: string) => void;
+	onUndo: () => void;
+	onRedo: () => void;
 };
 
 export function ThreadToolbar({
 	fileInputRef,
-	saveName,
-	saveActionLabel,
-	isStatePanelOpen,
+	workspaces,
+	activeWorkspace,
+	canUndo,
+	canRedo,
 	onImportState,
-	onNewCleanState,
-	onSaveNameChange,
-	onSaveCurrentState,
-	onToggleState,
 	onOpenImportPicker,
+	onSwitchWorkspace,
+	onCreateWorkspace,
+	onDuplicateWorkspace,
+	onRenameWorkspace,
+	onDeleteWorkspace,
+	onUndo,
+	onRedo,
 }: ThreadToolbarProps) {
 	return (
 		<Toolbar>
@@ -75,7 +87,7 @@ export function ThreadToolbar({
 				<ToolbarTitle>Thread Call Path Visualizer</ToolbarTitle>
 				<ToolbarDescription>
 					Write one step per line. Matching <InlineCode>[sync ID]</InlineCode>,{" "}
-					<InlineCode>[wait ID]</InlineCode>, and <InlineCode>[set ID]</InlineCode>
+					<InlineCode>[wait ID]</InlineCode>, and <InlineCode>[set ID]</InlineCode>{" "}
 					markers align vertically across threads.
 				</ToolbarDescription>
 			</ToolbarIntro>
@@ -88,23 +100,33 @@ export function ThreadToolbar({
 					onChange={onImportState}
 				/>
 
-				<SaveNameField
-					value={saveName}
-					onChange={(event) => onSaveNameChange(event.target.value)}
-					placeholder="Save name"
+				<WorkspaceSwitcher
+					workspaces={workspaces}
+					activeWorkspace={activeWorkspace}
+					onSwitch={onSwitchWorkspace}
+					onCreate={onCreateWorkspace}
+					onDuplicate={onDuplicateWorkspace}
+					onRename={onRenameWorkspace}
+					onDelete={onDeleteWorkspace}
 				/>
 
-				<ControlButton type="button" onClick={onSaveCurrentState}>
-					{saveActionLabel}
-				</ControlButton>
+				<UndoButton
+					type="button"
+					onClick={onUndo}
+					disabled={!canUndo}
+					title="Undo (Ctrl+Z)"
+				>
+					↩
+				</UndoButton>
 
-				<ControlButton type="button" onClick={onNewCleanState} title="New clean state">
-					New state
-				</ControlButton>
-
-				<ControlButton type="button" onClick={onToggleState}>
-					{isStatePanelOpen ? "Hide state" : "Show state"}
-				</ControlButton>
+				<UndoButton
+					type="button"
+					onClick={onRedo}
+					disabled={!canRedo}
+					title="Redo (Ctrl+Y)"
+				>
+					↪
+				</UndoButton>
 
 				<ControlButton type="button" onClick={onOpenImportPicker}>
 					Import

@@ -54,7 +54,10 @@ type UseThreadEditorsResult = {
 	threadsContentRef: React.MutableRefObject<HTMLDivElement | null>;
 };
 
-export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
+export function useThreadEditors(
+	threads: Thread[],
+	pushUndoSnapshot?: () => void
+): UseThreadEditorsResult {
 	const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
 	const [connectorOverlay, setConnectorOverlay] =
 		useState<ConnectorOverlay>(EMPTY_CONNECTOR_OVERLAY);
@@ -71,6 +74,10 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 	const applyViewZonesRef = useRef<() => void>(() => {});
 	const isApplyingZonesRef = useRef(false);
 	const pendingApplyViewZonesRef = useRef(false);
+	const pushUndoSnapshotRef = useRef(pushUndoSnapshot);
+	pushUndoSnapshotRef.current = pushUndoSnapshot;
+	const contentChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const hasPendingSnapshotRef = useRef(false);
 
 	const sharedEditorHeight = Math.max(
 		MIN_EDITOR_HEIGHT,
@@ -441,6 +448,22 @@ export function useThreadEditors(threads: Thread[]): UseThreadEditorsResult {
 				});
 
 				editor.onDidChangeModelContent(() => {
+					// Push undo snapshot at the start of a typing burst
+					if (!hasPendingSnapshotRef.current && pushUndoSnapshotRef.current) {
+						hasPendingSnapshotRef.current = true;
+						pushUndoSnapshotRef.current();
+					}
+
+					// Reset the debounce timer — after 800ms of inactivity,
+					// allow the next content change to push another snapshot
+					if (contentChangeTimerRef.current !== null) {
+						clearTimeout(contentChangeTimerRef.current);
+					}
+					contentChangeTimerRef.current = setTimeout(() => {
+						hasPendingSnapshotRef.current = false;
+						contentChangeTimerRef.current = null;
+					}, 800);
+
 					syncEditorHeight(threadId);
 					applySyncDecorations(threadId, editor.getValue());
 					if (!isApplyingZonesRef.current) {
