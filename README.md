@@ -11,10 +11,13 @@ https://qtax.github.io/thread-visualizer
 
 ## Features
 
-- Edit each thread side by side as pseudo-code or real code.
-- Align matching `[sync ID]`, `[wait ID]`, and `[set ID]` markers across threads.
-- Add, reorder, rename and remove threads.
-- Save and load thread states.
+- Side-by-side thread code editors.
+- Align `[sync ID]`, `[wait ID]`, and `[set ID]` markers across threads with visual connectors.
+- Add, reorder, rename, and remove threads.
+- Workspaces - named groups of threads with easy switching.
+- Unified undo/redo with Ctrl+Z/Y (persisted per workspace).
+- Import/export workspaces.
+- Auto-saves to localStorage.
 
 
 ## Development

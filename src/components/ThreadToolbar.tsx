@@ -26,6 +26,15 @@ const ToolbarTitle = styled.h1`
 	font-size: 0.8rem;
 	font-weight: 600;
 	color: ${palette.mutedText};
+
+	a {
+		color: inherit;
+		text-decoration: none;
+
+		&:hover {
+			text-decoration: underline;
+		}
+	}
 `;
 
 const ToolbarDescription = styled.p`
@@ -136,7 +145,11 @@ export function ThreadToolbar({
 			</ToolbarActions>
 
 			<ToolbarIntro>
-				<ToolbarTitle>Thread Call Path Visualizer</ToolbarTitle>
+				<ToolbarTitle>
+					<a href="https://github.com/Qtax/thread-visualizer" target="_blank">
+						Thread Call Path Visualizer
+					</a>
+				</ToolbarTitle>
 				<ToolbarDescription>
 					Write <InlineCode>[sync ID]</InlineCode> <InlineCode>[wait ID]</InlineCode>{" "}
 					<InlineCode>[set ID]</InlineCode> align across threads
