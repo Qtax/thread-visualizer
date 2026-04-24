@@ -30,10 +30,26 @@ export type SyncTagDecoration = {
 	endColumn: number;
 };
 
+export type SyncMarkerErrorReason =
+	| "wait-without-set"
+	| "set-without-wait"
+	| "set-after-wait-in-thread"
+	| "duplicate-sync-in-thread";
+
+export type SyncMarkerError = {
+	threadId: string;
+	id: string;
+	kind: SyncTagKind;
+	lineNumber: number;
+	reason: SyncMarkerErrorReason;
+};
+
 export type MatchedSyncGroupsResult = {
 	groups: SyncGroup[];
 	/** Sync IDs participating in a cycle (broken to avoid runaway alignment). */
 	cyclicIds: Set<string>;
+	/** Per-occurrence semantic errors (independent of cycle detection). */
+	errors: SyncMarkerError[];
 };
 
 export type SyncGroupOccurrence = {

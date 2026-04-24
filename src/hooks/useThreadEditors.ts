@@ -23,6 +23,7 @@ import type {
 	ConnectorOverlay,
 	ConnectorPath,
 	CursorPosition,
+	SyncMarkerErrorReason,
 	Thread,
 	ZonePlan,
 } from "../lib/thread-visualizer-types";
@@ -35,6 +36,19 @@ const COMPACT_EDITOR_FONT_SIZE = 12;
 const COMPACT_EDITOR_LINE_HEIGHT = 18;
 const COMPACT_EDITOR_TAB_SIZE = 2;
 const COMPACT_EDITOR_WIDTH_THRESHOLD = 600;
+
+function formatSyncErrorReason(reason: SyncMarkerErrorReason, id: string): string {
+	switch (reason) {
+		case "wait-without-set":
+			return `Wait for "${id}" has no matching set`;
+		case "set-without-wait":
+			return `Set for "${id}" has no matching wait`;
+		case "set-after-wait-in-thread":
+			return `Set for "${id}" appears after wait in the same thread`;
+		case "duplicate-sync-in-thread":
+			return `Duplicate sync for "${id}" in the same thread`;
+	}
+}
 
 type ConnectorEndpoint = {
 	threadId: string;
@@ -77,6 +91,9 @@ export function useThreadEditors(
 	const viewZoneIdsRef = useRef<Record<string, string[]>>({});
 	const zonePlanRef = useRef<ZonePlan>({});
 	const cyclicIdsRef = useRef<Set<string>>(new Set());
+	// Per-thread per-(line,id,kind) → human-readable error reason; merged with
+	// cyclicIds in applySyncDecorations to mark error tags.
+	const markerErrorsRef = useRef<Map<string, string>>(new Map());
 	const decorationCollectionsRef = useRef<
 		Record<string, Monaco.editor.IEditorDecorationsCollection | null>
 	>({});
@@ -221,6 +238,7 @@ export function useThreadEditors(
 		decorationCollectionsRef.current[threadId] = collection;
 
 		const cyclicIds = cyclicIdsRef.current;
+		const markerErrors = markerErrorsRef.current;
 		const lineDecorations = collectSyncLineDecorations(code);
 		const inlineTagDecorations = collectSyncTagDecorations(code);
 		const commentDecorations = collectLineCommentDecorations(code);
@@ -234,18 +252,25 @@ export function useThreadEditors(
 			})),
 			...inlineTagDecorations.map(({ id, kind, lineNumber, startColumn, endColumn }) => {
 				const isCyclic = cyclicIds.has(id);
-				const inlineClassName = isCyclic
+				const markerKey = `${threadId}:${lineNumber}:${id}:${kind}`;
+				const markerErrorReason = markerErrors.get(markerKey);
+				const isError = isCyclic || markerErrorReason !== undefined;
+				const inlineClassName = isError
 					? `${getSyncInlineTagClassName(kind)} sync-inline-tag--error`
 					: getSyncInlineTagClassName(kind);
+				const hoverParts: string[] = [];
+				if (isCyclic) {
+					hoverParts.push(`Sync id "${id}" is part of a cycle, alignment disabled`);
+				}
+				if (markerErrorReason !== undefined) {
+					hoverParts.push(markerErrorReason);
+				}
 				return {
 					range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
 					options: {
 						inlineClassName,
-						hoverMessage: isCyclic
-							? {
-									value: `Sync id "${id}" is part of a cycle, alignment disabled.`,
-								}
-							: undefined,
+						hoverMessage:
+							hoverParts.length > 0 ? { value: hoverParts.join("\n\n") } : undefined,
 					},
 				};
 			}),
@@ -323,6 +348,29 @@ export function useThreadEditors(
 
 		const connectors: ConnectorPath[] = [];
 
+		// For same-thread set→wait connectors, route both ends to the same
+		// editor side: prefer the right side, but for the rightmost thread
+		// (when there are multiple threads) use the left side so the arrow
+		// loops back inside the canvas instead of overflowing right.
+		const threadCount = threads.length;
+		let rightmostThreadId: string | null = null;
+		if (threadCount > 1) {
+			let rightmostCenterX = -Infinity;
+			threads.forEach((thread) => {
+				const editor = editorsRef.current[thread.id];
+				const editorNode = editor?.getDomNode();
+				if (!editor || !editorNode) {
+					return;
+				}
+				const rect = editorNode.getBoundingClientRect();
+				const cx = rect.left - canvasRect.left + rect.width / 2;
+				if (cx > rightmostCenterX) {
+					rightmostCenterX = cx;
+					rightmostThreadId = thread.id;
+				}
+			});
+		}
+
 		[...groups.entries()]
 			.sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
 			.forEach(([id, group]) => {
@@ -345,16 +393,27 @@ export function useThreadEditors(
 						return;
 					}
 
-					const targetIsRight = target.centerX >= anchorSource.centerX;
+					const sameThread = anchorSource.threadId === target.threadId;
+					const useRightSide = sameThread
+						? target.threadId !== rightmostThreadId
+						: target.centerX >= anchorSource.centerX;
 					const start = {
-						x: targetIsRight ? anchorSource.rightX : anchorSource.leftX,
+						x: useRightSide ? anchorSource.rightX : anchorSource.leftX,
 						y: anchorSource.y,
 					};
 					const end = {
-						x: targetIsRight ? target.leftX : target.rightX,
+						x: sameThread
+							? useRightSide
+								? target.rightX
+								: target.leftX
+							: useRightSide
+								? target.leftX
+								: target.rightX,
 						y: target.y,
 					};
-					const geometry = buildConnectorGeometry(start, end);
+					const geometry = buildConnectorGeometry(start, end, {
+						lateralSign: sameThread ? (useRightSide ? 1 : -1) : 1,
+					});
 
 					connectors.push({
 						id,
@@ -401,9 +460,15 @@ export function useThreadEditors(
 			editor.render();
 		});
 
-		const { groups } = collectMatchedSyncGroups(threads);
+		const { groups, errors } = collectMatchedSyncGroups(threads);
 		zonePlanRef.current = {};
 		cyclicIdsRef.current = new Set();
+		const errorMap = new Map<string, string>();
+		errors.forEach(({ threadId, id, kind, lineNumber, reason }) => {
+			const key = `${threadId}:${lineNumber}:${id}:${kind}`;
+			errorMap.set(key, formatSyncErrorReason(reason, id));
+		});
+		markerErrorsRef.current = errorMap;
 		if (groups.length > 0) {
 			// baseTops must cover every set/sync/wait line we may inspect, both
 			// for alignment and for cycle detection (which considers all set

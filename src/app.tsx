@@ -50,7 +50,7 @@ const syncDecorationStyles = css`
 	}
 
 	:global(.monaco-editor .sync-inline-tag--error) {
-		text-decoration: underline wavy #d83b3b;
+		text-decoration: underline dotted red;
 		text-underline-offset: 2px;
 	}
 

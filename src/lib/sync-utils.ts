@@ -6,6 +6,7 @@ import type {
 	SyncGroupOccurrence,
 	SyncLineDecoration,
 	SyncMarker,
+	SyncMarkerError,
 	SyncOccurrence,
 	SyncTagDecoration,
 	SyncTagKind,
@@ -223,6 +224,21 @@ export function collectMatchedSyncGroups(threads: Thread[]): MatchedSyncGroupsRe
 
 	const candidateGroups = new Map<string, SyncGroup>();
 
+	// For each (thread, id) the line of the first wait, used to exclude sets
+	// that come at/after a wait in the same thread (those are reported as
+	// `set-after-wait-in-thread` errors and must not act as alignment anchors,
+	// otherwise the wait would expand to align with the invalid set below it).
+	const firstWaitLineByThreadId = new Map<string, Map<string, number>>();
+	threads.forEach((thread) => {
+		const perThread = new Map<string, number>();
+		collectSyncMarkers(thread.code).forEach(({ id, kind, lineNumber }) => {
+			if (kind === "wait" && !perThread.has(id)) {
+				perThread.set(id, lineNumber);
+			}
+		});
+		firstWaitLineByThreadId.set(thread.id, perThread);
+	});
+
 	grouped.forEach((occurrences, id) => {
 		const syncOccurrences = occurrences.filter((occurrence) => occurrence.kind === "sync");
 		if (syncOccurrences.length > 0) {
@@ -238,7 +254,14 @@ export function collectMatchedSyncGroups(threads: Thread[]): MatchedSyncGroupsRe
 		}
 
 		const waitOccurrences = occurrences.filter((occurrence) => occurrence.kind === "wait");
-		const setOccurrences = occurrences.filter((occurrence) => occurrence.kind === "set");
+		const setOccurrences = occurrences
+			.filter((occurrence) => occurrence.kind === "set")
+			.filter((setOccurrence) => {
+				const firstWaitLine = firstWaitLineByThreadId.get(setOccurrence.threadId)?.get(id);
+				// Exclude same-thread sets that appear at/after the first wait
+				// of the same id in that thread — those are invalid anchors.
+				return firstWaitLine === undefined || setOccurrence.lineNumber < firstWaitLine;
+			});
 
 		if (waitOccurrences.length === 0) {
 			return;
@@ -253,13 +276,9 @@ export function collectMatchedSyncGroups(threads: Thread[]): MatchedSyncGroupsRe
 			return;
 		}
 
-		if (waitOccurrences.length > 1) {
-			candidateGroups.set(id, {
-				id,
-				strategy: "align-all",
-				occurrences: waitOccurrences,
-			});
-		}
+		// Wait-only ids do NOT form an alignment group. Each wait is just an
+		// unsatisfied wait and is reported via `errors` below; they should
+		// render at their natural one-line height with no expansion.
 	});
 
 	const matchedIds = new Set([...candidateGroups.keys()]);
@@ -377,12 +396,100 @@ export function collectMatchedSyncGroups(threads: Thread[]): MatchedSyncGroupsRe
 		orderedIds.push(...remainingIds);
 	}
 
+	const errors = collectSyncMarkerErrors(threads);
+
 	return {
 		groups: orderedIds
 			.map((syncId) => candidateGroups.get(syncId))
 			.filter((group): group is SyncGroup => group !== undefined),
 		cyclicIds: new Set<string>(),
+		errors,
 	};
+}
+
+/**
+ * Compute per-occurrence semantic errors for sync markers:
+ *   - `wait-without-set`:        a wait whose id has no set in any thread.
+ *   - `set-without-wait`:        a set whose id has no wait in any thread.
+ *   - `set-after-wait-in-thread`: a set that appears at or below a wait of
+ *     the same id in the same thread (sets must precede waits in a thread).
+ *   - `duplicate-sync-in-thread`: every sync after the first occurrence of
+ *     the same id in the same thread.
+ */
+function collectSyncMarkerErrors(threads: Thread[]): SyncMarkerError[] {
+	const errors: SyncMarkerError[] = [];
+	const idHasWait = new Set<string>();
+	const idHasSet = new Set<string>();
+
+	const perThread = threads.map((thread) => ({
+		threadId: thread.id,
+		markers: collectSyncMarkers(thread.code),
+	}));
+
+	perThread.forEach(({ markers }) => {
+		markers.forEach(({ id, kind }) => {
+			if (kind === "wait") {
+				idHasWait.add(id);
+			} else if (kind === "set") {
+				idHasSet.add(id);
+			}
+		});
+	});
+
+	perThread.forEach(({ threadId, markers }) => {
+		const firstWaitLineById = new Map<string, number>();
+		const seenSyncLines = new Map<string, number>();
+
+		markers.forEach(({ id, kind, lineNumber }) => {
+			if (kind === "wait" && !firstWaitLineById.has(id)) {
+				firstWaitLineById.set(id, lineNumber);
+			}
+		});
+
+		markers.forEach((marker) => {
+			const { id, kind, lineNumber } = marker;
+
+			if (kind === "wait") {
+				if (!idHasSet.has(id)) {
+					errors.push({ threadId, id, kind, lineNumber, reason: "wait-without-set" });
+				}
+				return;
+			}
+
+			if (kind === "set") {
+				if (!idHasWait.has(id)) {
+					errors.push({ threadId, id, kind, lineNumber, reason: "set-without-wait" });
+					return;
+				}
+				const firstWaitLine = firstWaitLineById.get(id);
+				if (firstWaitLine !== undefined && lineNumber >= firstWaitLine) {
+					errors.push({
+						threadId,
+						id,
+						kind,
+						lineNumber,
+						reason: "set-after-wait-in-thread",
+					});
+				}
+				return;
+			}
+
+			// kind === "sync"
+			if (seenSyncLines.has(id)) {
+				errors.push({
+					threadId,
+					id,
+					kind,
+					lineNumber,
+					reason: "duplicate-sync-in-thread",
+				});
+			} else {
+				seenSyncLines.set(id, lineNumber);
+			}
+		});
+	});
+
+	return errors;
 }
 
 /**

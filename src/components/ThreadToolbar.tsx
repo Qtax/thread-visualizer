@@ -151,8 +151,8 @@ export function ThreadToolbar({
 					</a>
 				</ToolbarTitle>
 				<ToolbarDescription>
-					Write <InlineCode>[sync ID]</InlineCode> <InlineCode>[wait ID]</InlineCode>{" "}
-					<InlineCode>[set ID]</InlineCode> align across threads
+					Use <InlineCode>[sync ID]</InlineCode> <InlineCode>[wait ID]</InlineCode>{" "}
+					<InlineCode>[set ID]</InlineCode> to align across threads
 				</ToolbarDescription>
 			</ToolbarIntro>
 		</Toolbar>

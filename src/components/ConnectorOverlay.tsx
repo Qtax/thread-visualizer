@@ -2,7 +2,8 @@ import { styled } from "@linaria/react";
 
 import type { ConnectorOverlay as ConnectorOverlayData } from "../lib/thread-visualizer-types";
 
-const CONNECTOR_COLOR = "rgba(82, 82, 91, 0.14)";
+const CONNECTOR_COLOR = "rgb(82, 82, 91)";
+const CONNECTOR_OPACITY = 0.14;
 
 const OverlayCanvas = styled.svg`
 	pointer-events: none;
@@ -26,7 +27,7 @@ export function ConnectorOverlay({ overlay }: ConnectorOverlayProps) {
 			viewBox={`0 0 ${Math.max(overlay.width, 1)} ${Math.max(overlay.height, 1)}`}
 		>
 			{overlay.connectors.map((connector) => (
-				<g key={connector.key}>
+				<g key={connector.key} opacity={CONNECTOR_OPACITY}>
 					<path
 						d={connector.path}
 						fill="none"

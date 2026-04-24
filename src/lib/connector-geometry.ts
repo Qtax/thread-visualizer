@@ -34,26 +34,50 @@ function buildArrowHead(point: Point, angle: number): { arrowPath: string; shaft
 
 export function buildConnectorGeometry(
 	start: Point,
-	end: Point
+	end: Point,
+	options?: { lateralSign?: 1 | -1 }
 ): Omit<ConnectorPath, "id" | "key"> {
 	const deltaX = end.x - start.x;
 	const deltaY = end.y - start.y;
 
 	if (Math.abs(deltaX) < 12) {
-		const lateralOffset = 28;
-		const verticalBend = Math.max(18, Math.min(72, Math.abs(deltaY) * 0.35));
-		const arrow = buildArrowHead(end, Math.atan2(deltaY, deltaX || 1));
+		// Same-thread / same-side connector. Build a path that exits the
+		// start block perpendicular to the editor edge, loops outward, and
+		// arrives at the end block perpendicular to the editor edge as well.
+		// Path = stub-out → cubic lobe → stub-in (then arrowhead). Control
+		// points share the y of their adjacent endpoint, so the cubic's
+		// tangent at each end is purely horizontal — joining the straight
+		// stubs without a visible kink.
+		const lateralSign = options?.lateralSign ?? 1;
+		const stubLength = Math.max(9, Math.min(18, Math.abs(deltaY) * 0.09 + 7));
+		const lobeWidth = Math.max(20, Math.min(30, Math.abs(deltaY) * 0.11 + 15));
+
+		const startStubEnd = { x: start.x + lateralSign * stubLength, y: start.y };
+		const endStubStart = { x: end.x + lateralSign * stubLength, y: end.y };
+
+		// Arrowhead points back toward the editor edge along the stub.
+		const arrowAngle = Math.atan2(0, -lateralSign);
+		const arrow = buildArrowHead(end, arrowAngle);
+		// The shaft must end where the arrow begins; replace the inner stub
+		// endpoint accordingly so the path lines up with the arrow.
+		const stubInTarget = arrow.shaftEnd;
+
 		const control1 = {
-			x: start.x + lateralOffset,
-			y: start.y + (deltaY >= 0 ? verticalBend : -verticalBend),
+			x: startStubEnd.x + lateralSign * lobeWidth,
+			y: startStubEnd.y,
 		};
 		const control2 = {
-			x: arrow.shaftEnd.x + lateralOffset,
-			y: arrow.shaftEnd.y - (deltaY >= 0 ? verticalBend : -verticalBend),
+			x: endStubStart.x + lateralSign * lobeWidth,
+			y: endStubStart.y,
 		};
 
 		return {
-			path: `M ${start.x} ${start.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${arrow.shaftEnd.x} ${arrow.shaftEnd.y}`,
+			path:
+				`M ${start.x} ${start.y}` +
+				` L ${startStubEnd.x} ${startStubEnd.y}` +
+				` C ${control1.x} ${control1.y}, ${control2.x} ${control2.y},` +
+				` ${endStubStart.x} ${endStubStart.y}` +
+				` L ${stubInTarget.x} ${stubInTarget.y}`,
 			arrowPath: arrow.arrowPath,
 		};
 	}
