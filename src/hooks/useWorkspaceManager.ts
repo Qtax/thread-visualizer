@@ -616,7 +616,10 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 			const payload = {
 				workspaces: selected.map((w) => ({
 					name: w.name,
-					threads: w.threads,
+					threads: w.threads.map((thread) => ({
+						name: thread.name,
+						code: thread.code,
+					})),
 				})),
 			};
 
