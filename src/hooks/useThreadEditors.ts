@@ -30,8 +30,10 @@ import type {
 const MIN_EDITOR_HEIGHT = 180;
 const DEFAULT_EDITOR_FONT_SIZE = 14;
 const DEFAULT_EDITOR_LINE_HEIGHT = 22;
+const DEFAULT_EDITOR_TAB_SIZE = 4;
 const COMPACT_EDITOR_FONT_SIZE = 12;
-const COMPACT_EDITOR_LINE_HEIGHT = 20;
+const COMPACT_EDITOR_LINE_HEIGHT = 18;
+const COMPACT_EDITOR_TAB_SIZE = 2;
 const COMPACT_EDITOR_WIDTH_THRESHOLD = 600;
 
 type ConnectorEndpoint = {
@@ -133,8 +135,16 @@ export function useThreadEditors(
 		const layoutInfo = editor.getLayoutInfo();
 		const useCompactTypography =
 			layoutInfo.width < COMPACT_EDITOR_WIDTH_THRESHOLD
-				? { fontSize: COMPACT_EDITOR_FONT_SIZE, lineHeight: COMPACT_EDITOR_LINE_HEIGHT }
-				: { fontSize: DEFAULT_EDITOR_FONT_SIZE, lineHeight: DEFAULT_EDITOR_LINE_HEIGHT };
+				? {
+						fontSize: COMPACT_EDITOR_FONT_SIZE,
+						lineHeight: COMPACT_EDITOR_LINE_HEIGHT,
+						tabSize: COMPACT_EDITOR_TAB_SIZE,
+					}
+				: {
+						fontSize: DEFAULT_EDITOR_FONT_SIZE,
+						lineHeight: DEFAULT_EDITOR_LINE_HEIGHT,
+						tabSize: DEFAULT_EDITOR_TAB_SIZE,
+					};
 
 		editor.updateOptions(useCompactTypography);
 	}, []);
@@ -571,7 +581,7 @@ export function useThreadEditors(
 					fontSize: DEFAULT_EDITOR_FONT_SIZE,
 					fontFamily:
 						"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
-					tabSize: 4,
+					tabSize: DEFAULT_EDITOR_TAB_SIZE,
 					insertSpaces: false,
 					// Render hover/suggestion widgets in a fixed-position layer
 					// so they aren't clipped by narrow editor columns.
