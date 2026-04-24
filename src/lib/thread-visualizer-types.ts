@@ -23,10 +23,17 @@ export type SyncMarker = {
 };
 
 export type SyncTagDecoration = {
+	id: string;
 	kind: SyncTagKind;
 	lineNumber: number;
 	startColumn: number;
 	endColumn: number;
+};
+
+export type MatchedSyncGroupsResult = {
+	groups: SyncGroup[];
+	/** Sync IDs participating in a cycle (broken to avoid runaway alignment). */
+	cyclicIds: Set<string>;
 };
 
 export type SyncGroupOccurrence = {

@@ -49,6 +49,11 @@ const syncDecorationStyles = css`
 		--sync-decoration-color: var(--sync-decoration-color-set);
 	}
 
+	:global(.monaco-editor .sync-inline-tag--error) {
+		text-decoration: underline wavy #d83b3b;
+		text-underline-offset: 2px;
+	}
+
 	:global(.monaco-editor .selection-highlight) {
 		background: rgba(0, 120, 215, 0.15);
 		border-radius: 2px;

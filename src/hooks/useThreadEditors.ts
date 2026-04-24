@@ -15,6 +15,7 @@ import {
 	collectSyncMarkers,
 	collectSyncTagDecorations,
 	computeAlignmentPlanFromBaseTops,
+	detectHarmfulSyncCycles,
 	getSyncDecorationClassName,
 	getSyncInlineTagClassName,
 } from "../lib/sync-utils";
@@ -73,6 +74,7 @@ export function useThreadEditors(
 	const editorsRef = useRef<Record<string, Monaco.editor.IStandaloneCodeEditor | null>>({});
 	const viewZoneIdsRef = useRef<Record<string, string[]>>({});
 	const zonePlanRef = useRef<ZonePlan>({});
+	const cyclicIdsRef = useRef<Set<string>>(new Set());
 	const decorationCollectionsRef = useRef<
 		Record<string, Monaco.editor.IEditorDecorationsCollection | null>
 	>({});
@@ -208,6 +210,7 @@ export function useThreadEditors(
 			decorationCollectionsRef.current[threadId] ?? editor.createDecorationsCollection([]);
 		decorationCollectionsRef.current[threadId] = collection;
 
+		const cyclicIds = cyclicIdsRef.current;
 		const lineDecorations = collectSyncLineDecorations(code);
 		const inlineTagDecorations = collectSyncTagDecorations(code);
 		const commentDecorations = collectLineCommentDecorations(code);
@@ -219,12 +222,23 @@ export function useThreadEditors(
 					className: getSyncDecorationClassName(kind),
 				},
 			})),
-			...inlineTagDecorations.map(({ kind, lineNumber, startColumn, endColumn }) => ({
-				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
-				options: {
-					inlineClassName: getSyncInlineTagClassName(kind),
-				},
-			})),
+			...inlineTagDecorations.map(({ id, kind, lineNumber, startColumn, endColumn }) => {
+				const isCyclic = cyclicIds.has(id);
+				const inlineClassName = isCyclic
+					? `${getSyncInlineTagClassName(kind)} sync-inline-tag--error`
+					: getSyncInlineTagClassName(kind);
+				return {
+					range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
+					options: {
+						inlineClassName,
+						hoverMessage: isCyclic
+							? {
+									value: `Sync id "${id}" is part of a cycle, alignment disabled.`,
+								}
+							: undefined,
+					},
+				};
+			}),
 			...commentDecorations.map(({ lineNumber, startColumn, endColumn }) => ({
 				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
 				options: {
@@ -377,27 +391,54 @@ export function useThreadEditors(
 			editor.render();
 		});
 
-		const groups = collectMatchedSyncGroups(threads);
+		const { groups } = collectMatchedSyncGroups(threads);
 		zonePlanRef.current = {};
+		cyclicIdsRef.current = new Set();
 		if (groups.length > 0) {
+			// baseTops must cover every set/sync/wait line we may inspect, both
+			// for alignment and for cycle detection (which considers all set
+			// instances across threads to pick the global anchor).
 			const baseTops: Record<string, Record<number, number>> = {};
+			const recordTop = (threadId: string, lineNumber: number) => {
+				const editor = editorsRef.current[threadId];
+				if (!editor) {
+					return;
+				}
+				if (!baseTops[threadId]) {
+					baseTops[threadId] = {};
+				}
+				if (baseTops[threadId][lineNumber] === undefined) {
+					baseTops[threadId][lineNumber] = editor.getTopForLineNumber(lineNumber);
+				}
+			};
 
 			groups.forEach((group) => {
 				group.occurrences.forEach(({ threadId, lineNumber }) => {
-					const editor = editorsRef.current[threadId];
-					if (!editor) {
-						return;
-					}
-
-					if (!baseTops[threadId]) {
-						baseTops[threadId] = {};
-					}
-
-					baseTops[threadId][lineNumber] = editor.getTopForLineNumber(lineNumber);
+					recordTop(threadId, lineNumber);
+				});
+			});
+			threads.forEach((thread) => {
+				collectSyncMarkers(thread.code).forEach(({ lineNumber }) => {
+					recordTop(thread.id, lineNumber);
 				});
 			});
 
-			const plan = computeAlignmentPlanFromBaseTops(groups, baseTops);
+			const matchedIds = new Set(groups.map((group) => group.id));
+			const groupStrategyById = new Map(
+				groups.map((group) => [group.id, group.strategy] as const)
+			);
+			const cyclicIds = detectHarmfulSyncCycles(
+				threads,
+				matchedIds,
+				baseTops,
+				groupStrategyById
+			);
+			cyclicIdsRef.current = cyclicIds;
+
+			const activeGroups =
+				cyclicIds.size === 0 ? groups : groups.filter((group) => !cyclicIds.has(group.id));
+
+			const plan = computeAlignmentPlanFromBaseTops(activeGroups, baseTops);
 			zonePlanRef.current = plan;
 
 			threads.forEach((thread) => {
@@ -425,6 +466,10 @@ export function useThreadEditors(
 			syncEditorHeight(thread.id);
 		});
 
+		// Refresh decorations across all threads so cycle/error markers stay
+		// consistent with the latest cross-thread analysis.
+		threads.forEach((thread) => applySyncDecorations(thread.id, thread.code));
+
 		requestAnimationFrame(() => {
 			updateConnectorOverlay();
 			isApplyingZonesRef.current = false;
@@ -433,7 +478,7 @@ export function useThreadEditors(
 				applyViewZonesRef.current();
 			}
 		});
-	}, [syncEditorHeight, threads, updateConnectorOverlay]);
+	}, [applySyncDecorations, syncEditorHeight, threads, updateConnectorOverlay]);
 
 	useEffect(() => {
 		const canvas = threadsCanvasRef.current;
@@ -528,6 +573,9 @@ export function useThreadEditors(
 						"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
 					tabSize: 4,
 					insertSpaces: false,
+					// Render hover/suggestion widgets in a fixed-position layer
+					// so they aren't clipped by narrow editor columns.
+					fixedOverflowWidgets: true,
 				});
 
 				syncEditorFontSize(editor);

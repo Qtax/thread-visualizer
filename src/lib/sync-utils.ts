@@ -1,6 +1,7 @@
 import type * as Monaco from "monaco-editor";
 
 import type {
+	MatchedSyncGroupsResult,
 	SyncGroup,
 	SyncGroupOccurrence,
 	SyncLineDecoration,
@@ -113,6 +114,7 @@ export function collectSyncTagDecorations(text: string): SyncTagDecoration[] {
 			}
 
 			decorations.push({
+				id,
 				kind: match[1].toLowerCase() as SyncTagKind,
 				lineNumber: index + 1,
 				startColumn: match.index + 1,
@@ -167,10 +169,11 @@ export function collectSyncLineDecorations(text: string): SyncLineDecoration[] {
 	}));
 }
 
-export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
+export function collectMatchedSyncGroups(threads: Thread[]): MatchedSyncGroupsResult {
 	const grouped = new Map<string, SyncGroupOccurrence[]>();
 	const perThreadSequences: Array<Array<{ id: string; lineNumber: number }>> = [];
 	const lineStats = new Map<string, { min: number; sum: number; count: number }>();
+	const seenSetIdsByThread = new Map<string, Set<string>>();
 
 	for (const thread of threads) {
 		const syncs = parseFirstSyncs(thread.code);
@@ -186,6 +189,19 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 				}
 
 				seenSyncIds.add(id);
+			}
+
+			// Only the FIRST set per id in a thread participates in alignment.
+			// Repeating sets later in the same thread for the same id are
+			// ignored (they still get highlighted via decorations, but never
+			// act as anchors).
+			if (kind === "set") {
+				const seenForThread = seenSetIdsByThread.get(thread.id) ?? new Set<string>();
+				if (seenForThread.has(id)) {
+					return;
+				}
+				seenForThread.add(id);
+				seenSetIdsByThread.set(thread.id, seenForThread);
 			}
 
 			const occurrences = grouped.get(id) ?? [];
@@ -275,6 +291,10 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 		}
 	});
 
+	// Cycle detection moved out of this function: it requires line-top
+	// positions to determine which set is the global anchor for each id.
+	// See detectHarmfulSyncCycles, called by the alignment caller.
+
 	const compareSyncIds = (left: string, right: string) => {
 		const leftStats = lineStats.get(left);
 		const rightStats = lineStats.get(right);
@@ -357,9 +377,243 @@ export function collectMatchedSyncGroups(threads: Thread[]): SyncGroup[] {
 		orderedIds.push(...remainingIds);
 	}
 
-	return orderedIds
-		.map((syncId) => candidateGroups.get(syncId))
-		.filter((group): group is SyncGroup => group !== undefined);
+	return {
+		groups: orderedIds
+			.map((syncId) => candidateGroups.get(syncId))
+			.filter((group): group is SyncGroup => group !== undefined),
+		cyclicIds: new Set<string>(),
+	};
+}
+
+/**
+ * Detect harmful sync-id cycles using line-top positions.
+ *
+ * A "harmful" edge A → B exists in some thread T when adding a zone for a
+ * marker of id A in T would push the *anchor* for id B in T downward,
+ * forcing further alignment growth that can chain back to A.
+ *
+ * Anchor selection per id B (using baseTops):
+ *   - For ids with at least one set: anchor = the single set with the
+ *     globally smallest baseTop. Other sets of B (in any thread, including
+ *     repeats in the same thread) are non-anchors and don't participate.
+ *   - For sync-only groups: every sync of B is treated as an anchor (they
+ *     align with each other).
+ *   - For wait-only groups: every wait of B is treated as an anchor (they
+ *     align with each other).
+ *
+ * Edge condition for expander A at line L_a, anchor of B at line L_b in
+ * the same thread:
+ *   - wait-anchored zones are placed "after" L_a → push lines > L_a
+ *   - sync-anchored zones are placed "before" L_a → push lines >= L_a
+ */
+export function detectHarmfulSyncCycles(
+	threads: Thread[],
+	matchedIds: Set<string>,
+	baseTops: Record<string, Record<number, number>>,
+	groupStrategyById: Map<string, SyncGroup["strategy"]>
+): Set<string> {
+	if (matchedIds.size === 0) {
+		return new Set();
+	}
+
+	type AnchorInstance = { threadId: string; lineNumber: number; kind: SyncTagKind };
+	const anchorsById = new Map<string, AnchorInstance[]>();
+	matchedIds.forEach((id) => anchorsById.set(id, []));
+
+	const perThreadMarkers: Array<{ threadId: string; markers: SyncMarker[] }> = threads.map(
+		(thread) => ({
+			threadId: thread.id,
+			markers: collectSyncMarkers(thread.code),
+		})
+	);
+
+	// Collect all candidate anchor instances per id.
+	const setInstancesById = new Map<string, AnchorInstance[]>();
+	perThreadMarkers.forEach(({ threadId, markers }) => {
+		const seenSetByThread = new Set<string>();
+		const seenSyncByThread = new Set<string>();
+		markers.forEach(({ id, kind, lineNumber }) => {
+			if (!matchedIds.has(id)) {
+				return;
+			}
+			if (kind === "set") {
+				if (seenSetByThread.has(id)) {
+					return;
+				}
+				seenSetByThread.add(id);
+				const arr = setInstancesById.get(id) ?? [];
+				arr.push({ threadId, lineNumber, kind });
+				setInstancesById.set(id, arr);
+			} else if (kind === "sync") {
+				if (seenSyncByThread.has(id)) {
+					return;
+				}
+				seenSyncByThread.add(id);
+				const arr = anchorsById.get(id);
+				if (arr) {
+					arr.push({ threadId, lineNumber, kind });
+				}
+			} else {
+				// wait
+				const strategy = groupStrategyById.get(id);
+				if (strategy === "align-all") {
+					// Wait-only group: each wait is an anchor for the others.
+					const arr = anchorsById.get(id);
+					if (arr) {
+						arr.push({ threadId, lineNumber, kind });
+					}
+				}
+			}
+		});
+	});
+
+	// For ids with sets, pick the single global anchor set: the one with the
+	// smallest baseTop. This matches the runtime alignment choice.
+	setInstancesById.forEach((instances, id) => {
+		let best: AnchorInstance | undefined;
+		let bestTop = Number.POSITIVE_INFINITY;
+		instances.forEach((instance) => {
+			const top = baseTops[instance.threadId]?.[instance.lineNumber];
+			if (top === undefined) {
+				return;
+			}
+			if (top < bestTop) {
+				bestTop = top;
+				best = instance;
+			}
+		});
+		if (best) {
+			anchorsById.get(id)!.push(best);
+		}
+	});
+
+	// Build harmful-edges graph.
+	const harmfulEdges = new Map<string, Set<string>>();
+	matchedIds.forEach((id) => harmfulEdges.set(id, new Set()));
+
+	perThreadMarkers.forEach(({ threadId, markers }) => {
+		const expanders = markers.filter(
+			(marker) => marker.kind === "wait" || marker.kind === "sync"
+		);
+		// Only consider anchors that live in this same thread — pushing a
+		// marker line in thread T cannot move a marker in thread T'.
+		expanders.forEach((expander) => {
+			if (!matchedIds.has(expander.id)) {
+				return;
+			}
+			matchedIds.forEach((targetId) => {
+				if (targetId === expander.id) {
+					return;
+				}
+				const targetAnchors = anchorsById.get(targetId);
+				if (!targetAnchors) {
+					return;
+				}
+				for (const anchor of targetAnchors) {
+					if (anchor.threadId !== threadId) {
+						continue;
+					}
+					const pushes =
+						expander.kind === "wait"
+							? anchor.lineNumber > expander.lineNumber
+							: anchor.lineNumber >= expander.lineNumber;
+					if (pushes) {
+						harmfulEdges.get(expander.id)!.add(targetId);
+						break;
+					}
+				}
+			});
+		});
+	});
+
+	return findCyclicSyncIds(matchedIds, harmfulEdges);
+}
+
+function findCyclicSyncIds(matchedIds: Set<string>, edges: Map<string, Set<string>>): Set<string> {
+	const cyclic = new Set<string>();
+	const index = new Map<string, number>();
+	const lowlink = new Map<string, number>();
+	const onStack = new Set<string>();
+	const stack: string[] = [];
+	let nextIndex = 0;
+
+	// Iterative Tarjan's SCC to avoid recursion stack limits.
+	type Frame = { v: string; outIter: Iterator<string>; pendingChild?: string };
+	const run = (start: string) => {
+		const frames: Frame[] = [];
+		const push = (v: string) => {
+			index.set(v, nextIndex);
+			lowlink.set(v, nextIndex);
+			nextIndex += 1;
+			stack.push(v);
+			onStack.add(v);
+			const outgoing = edges.get(v);
+			frames.push({
+				v,
+				outIter: (outgoing ?? new Set<string>()).values(),
+			});
+		};
+
+		push(start);
+
+		while (frames.length > 0) {
+			const frame = frames[frames.length - 1];
+			if (frame.pendingChild !== undefined) {
+				const w = frame.pendingChild;
+				frame.pendingChild = undefined;
+				lowlink.set(frame.v, Math.min(lowlink.get(frame.v)!, lowlink.get(w)!));
+			}
+
+			let advanced = false;
+			while (true) {
+				const { value: w, done } = frame.outIter.next();
+				if (done) {
+					break;
+				}
+				if (!matchedIds.has(w)) {
+					continue;
+				}
+				if (!index.has(w)) {
+					frame.pendingChild = w;
+					push(w);
+					advanced = true;
+					break;
+				} else if (onStack.has(w)) {
+					lowlink.set(frame.v, Math.min(lowlink.get(frame.v)!, index.get(w)!));
+				}
+			}
+
+			if (advanced) {
+				continue;
+			}
+
+			if (lowlink.get(frame.v) === index.get(frame.v)) {
+				const scc: string[] = [];
+				while (true) {
+					const w = stack.pop()!;
+					onStack.delete(w);
+					scc.push(w);
+					if (w === frame.v) {
+						break;
+					}
+				}
+				const hasSelfLoop = edges.get(frame.v)?.has(frame.v) ?? false;
+				if (scc.length > 1 || hasSelfLoop) {
+					scc.forEach((id) => cyclic.add(id));
+				}
+			}
+
+			frames.pop();
+		}
+	};
+
+	for (const id of matchedIds) {
+		if (!index.has(id)) {
+			run(id);
+		}
+	}
+
+	return cyclic;
 }
 
 function getAccumulatedOffset(
