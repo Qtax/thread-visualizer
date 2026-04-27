@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import {
+	GETTING_STARTED_NAME,
+	GETTING_STARTED_TEMPLATE_DATE,
 	MAX_UNDO_ENTRIES,
-	createCleanThreads,
+	createGettingStartedWorkspace,
 	createWorkspace,
 	loadWorkspaces,
 	normalizeThreads,
@@ -28,6 +30,15 @@ type UseWorkspaceManagerResult = {
 	duplicateWorkspace: () => void;
 	renameWorkspace: (name: string) => void;
 	deleteWorkspace: (workspaceId: string) => void;
+
+	/**
+	 * Whether to show the "Restore Getting started" action in the workspace
+	 * dropdown. True when the bundled starter is missing, edited, or out-of-date.
+	 */
+	showRestoreGettingStarted: boolean;
+	/** True when a newer bundled "Getting started" template exists. */
+	gettingStartedUpdateAvailable: boolean;
+	restoreGettingStarted: () => void;
 
 	// Undo/redo
 	undo: () => void;
@@ -525,6 +536,34 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		});
 	}, []);
 
+	// --- Getting started template ---
+	// Identify the starter workspace by name. The action replaces it on click.
+	// Show it when the starter is missing, edited, or out-of-date. The update
+	// dot is independent of the label and signals that a newer bundled template
+	// exists — even when the local copy was edited.
+	const starter = state.workspaces.find((w) => w.name === GETTING_STARTED_NAME);
+	const gettingStartedUpdateAvailable =
+		!!starter && starter.createdAt < GETTING_STARTED_TEMPLATE_DATE;
+	const showRestoreGettingStarted =
+		!starter || gettingStartedUpdateAvailable || starter.undoStack.length > 0;
+
+	const restoreGettingStarted = useCallback(() => {
+		const fresh = createGettingStartedWorkspace();
+		setState((current) => {
+			const index = current.workspaces.findIndex((w) => w.name === GETTING_STARTED_NAME);
+			if (index >= 0) {
+				const replaced: Workspace = { ...fresh, id: current.workspaces[index].id };
+				const nextWorkspaces = [...current.workspaces];
+				nextWorkspaces[index] = replaced;
+				return { workspaces: nextWorkspaces, activeId: replaced.id };
+			}
+			return {
+				workspaces: [...current.workspaces, fresh],
+				activeId: fresh.id,
+			};
+		});
+	}, []);
+
 	// --- Import ---
 	const openImportPicker = useCallback(() => {
 		fileInputRef.current?.click();
@@ -652,6 +691,9 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		duplicateWorkspace,
 		renameWorkspace,
 		deleteWorkspace,
+		showRestoreGettingStarted,
+		gettingStartedUpdateAvailable,
+		restoreGettingStarted,
 
 		undo,
 		redo,

@@ -114,6 +114,9 @@ export default function ThreadCallPathVisualizer() {
 		duplicateWorkspace,
 		renameWorkspace,
 		deleteWorkspace,
+		showRestoreGettingStarted,
+		gettingStartedUpdateAvailable,
+		restoreGettingStarted,
 
 		undo,
 		redo,
@@ -159,6 +162,9 @@ export default function ThreadCallPathVisualizer() {
 					onDuplicateWorkspace={duplicateWorkspace}
 					onRenameWorkspace={renameWorkspace}
 					onDeleteWorkspace={deleteWorkspace}
+					showRestoreGettingStarted={showRestoreGettingStarted}
+					gettingStartedUpdateAvailable={gettingStartedUpdateAvailable}
+					onRestoreGettingStarted={restoreGettingStarted}
 					onAddThread={addThread}
 					onUndo={undo}
 					onRedo={redo}

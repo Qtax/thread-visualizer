@@ -177,6 +177,16 @@ const DropdownAction = styled.button`
 	}
 `;
 
+const UpdateDot = styled.span`
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	margin-left: auto;
+	border-radius: 50%;
+	background: #3a8bff;
+	flex-shrink: 0;
+`;
+
 const RenameInput = styled.input`
 	appearance: none;
 	flex: 1;
@@ -273,6 +283,9 @@ type WorkspaceSwitcherProps = {
 	onDelete: (workspaceId: string) => void;
 	onExport: (workspaceIds: string[]) => void;
 	onImport: () => void;
+	showRestoreGettingStarted: boolean;
+	gettingStartedUpdateAvailable: boolean;
+	onRestoreGettingStarted: () => void;
 };
 
 export function WorkspaceSwitcher({
@@ -285,6 +298,9 @@ export function WorkspaceSwitcher({
 	onDelete,
 	onExport,
 	onImport,
+	showRestoreGettingStarted,
+	gettingStartedUpdateAvailable,
+	onRestoreGettingStarted,
 }: WorkspaceSwitcherProps) {
 	const [isOpen, setIsOpen] = useState(false);
 	const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -517,6 +533,24 @@ export function WorkspaceSwitcher({
 							<DropdownAction type="button" onClick={handleDuplicate}>
 								⧉ Duplicate current
 							</DropdownAction>
+
+							{showRestoreGettingStarted && (
+								<DropdownAction
+									type="button"
+									onClick={() => {
+										onRestoreGettingStarted();
+										setIsOpen(false);
+									}}
+									title={
+										gettingStartedUpdateAvailable
+											? "A newer Getting started is available"
+											: "Replace with a fresh Getting started workspace"
+									}
+								>
+									↻ Restore Getting started
+									{gettingStartedUpdateAvailable && <UpdateDot />}
+								</DropdownAction>
+							)}
 
 							<DropdownDivider />
 

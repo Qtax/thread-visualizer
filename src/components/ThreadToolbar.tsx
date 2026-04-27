@@ -72,6 +72,9 @@ type ThreadToolbarProps = {
 	onDuplicateWorkspace: () => void;
 	onRenameWorkspace: (name: string) => void;
 	onDeleteWorkspace: (workspaceId: string) => void;
+	showRestoreGettingStarted: boolean;
+	gettingStartedUpdateAvailable: boolean;
+	onRestoreGettingStarted: () => void;
 	onAddThread: () => void;
 	onUndo: () => void;
 	onRedo: () => void;
@@ -91,6 +94,9 @@ export function ThreadToolbar({
 	onDuplicateWorkspace,
 	onRenameWorkspace,
 	onDeleteWorkspace,
+	showRestoreGettingStarted,
+	gettingStartedUpdateAvailable,
+	onRestoreGettingStarted,
 	onAddThread,
 	onUndo,
 	onRedo,
@@ -115,6 +121,9 @@ export function ThreadToolbar({
 					onDelete={onDeleteWorkspace}
 					onExport={onExportWorkspaces}
 					onImport={onOpenImportPicker}
+					showRestoreGettingStarted={showRestoreGettingStarted}
+					gettingStartedUpdateAvailable={gettingStartedUpdateAvailable}
+					onRestoreGettingStarted={onRestoreGettingStarted}
 				/>
 
 				<Separator />

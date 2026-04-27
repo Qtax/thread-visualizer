@@ -1,25 +1,17 @@
 import type { Thread, UndoEntry, Workspace } from "./thread-visualizer-types";
 
-// New workspace keys
 export const WORKSPACES_STORAGE_KEY = "thread-visualizer-workspaces-v1";
 export const ACTIVE_WORKSPACE_KEY = "thread-visualizer-active-workspace-v1";
 
 export const MAX_UNDO_ENTRIES = 200;
 
-export function createCleanThreads(): Thread[] {
-	return [
-		{
-			id: crypto.randomUUID(),
-			name: "Thread 1",
-			code: "",
-		},
-		{
-			id: crypto.randomUUID(),
-			name: "Thread 2",
-			code: "",
-		},
-	];
-}
+/**
+ * ISO timestamp of the last change to the bundled "Getting started" template.
+ * Bump whenever `createInitialThreads` content changes so existing users are
+ * offered an update (compared against the workspace's `createdAt`).
+ */
+export const GETTING_STARTED_TEMPLATE_DATE = "2026-04-27T10:44:30.000Z";
+export const GETTING_STARTED_NAME = "Getting started";
 
 function createInitialThreads(): Thread[] {
 	return [
@@ -92,6 +84,25 @@ function createInitialThreads(): Thread[] {
 				"[wait same]",
 				"[set same]",
 			].join("\n"),
+		},
+	];
+}
+
+export function createGettingStartedWorkspace(): Workspace {
+	return createWorkspace(GETTING_STARTED_NAME, createInitialThreads());
+}
+
+function createCleanThreads(): Thread[] {
+	return [
+		{
+			id: crypto.randomUUID(),
+			name: "Thread 1",
+			code: "",
+		},
+		{
+			id: crypto.randomUUID(),
+			name: "Thread 2",
+			code: "",
 		},
 	];
 }
@@ -218,7 +229,7 @@ function normalizeWorkspace(item: unknown): Workspace | null {
 
 export function loadWorkspaces(): { workspaces: Workspace[]; activeId: string } {
 	if (typeof window === "undefined") {
-		const initial = createWorkspace("Getting started", createInitialThreads());
+		const initial = createGettingStartedWorkspace();
 		return { workspaces: [initial], activeId: initial.id };
 	}
 
@@ -232,7 +243,7 @@ export function loadWorkspaces(): { workspaces: Workspace[]; activeId: string } 
 	try {
 		const raw = window.localStorage.getItem(WORKSPACES_STORAGE_KEY);
 		if (!raw) {
-			const initial = createWorkspace("Getting started", createInitialThreads());
+			const initial = createGettingStartedWorkspace();
 			return { workspaces: [initial], activeId: initial.id };
 		}
 
@@ -242,7 +253,7 @@ export function loadWorkspaces(): { workspaces: Workspace[]; activeId: string } 
 			.filter((item): item is Workspace => item !== null);
 
 		if (workspaces.length === 0) {
-			const initial = createWorkspace("Getting started", createInitialThreads());
+			const initial = createGettingStartedWorkspace();
 			return { workspaces: [initial], activeId: initial.id };
 		}
 
@@ -253,7 +264,7 @@ export function loadWorkspaces(): { workspaces: Workspace[]; activeId: string } 
 
 		return { workspaces, activeId };
 	} catch {
-		const initial = createWorkspace("Getting started", createInitialThreads());
+		const initial = createGettingStartedWorkspace();
 		return { workspaces: [initial], activeId: initial.id };
 	}
 }
@@ -273,9 +284,3 @@ export function persistActiveWorkspaceId(id: string) {
 
 	window.localStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
 }
-
-function createInitialThreads_static(): Thread[] {
-	return createInitialThreads();
-}
-
-export { createInitialThreads_static as createInitialThreads };
