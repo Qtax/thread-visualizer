@@ -1,8 +1,4 @@
-import type { SavedState, Thread, UndoEntry, Workspace } from "./thread-visualizer-types";
-
-// Legacy keys (read-only for migration)
-export const STORAGE_KEY = "thread-call-path-visualizer-state-v2";
-export const SAVES_STORAGE_KEY = "thread-call-path-visualizer-saves-v1";
+import type { Thread, UndoEntry, Workspace } from "./thread-visualizer-types";
 
 // New workspace keys
 export const WORKSPACES_STORAGE_KEY = "thread-visualizer-workspaces-v1";
@@ -14,12 +10,12 @@ export function createCleanThreads(): Thread[] {
 	return [
 		{
 			id: crypto.randomUUID(),
-			name: "Thread A",
+			name: "Thread 1",
 			code: "",
 		},
 		{
 			id: crypto.randomUUID(),
-			name: "Thread B",
+			name: "Thread 2",
 			code: "",
 		},
 	];
@@ -218,134 +214,7 @@ function normalizeWorkspace(item: unknown): Workspace | null {
 	};
 }
 
-// --- Legacy loaders (for migration) ---
-
-function loadLegacyThreads(): Thread[] | null {
-	if (typeof window === "undefined") {
-		return null;
-	}
-
-	try {
-		const raw = window.localStorage.getItem(STORAGE_KEY);
-		if (!raw) {
-			return null;
-		}
-
-		const parsed = JSON.parse(raw) as { threads?: unknown };
-		return normalizeThreads(parsed.threads);
-	} catch {
-		return null;
-	}
-}
-
-function loadLegacySavedStates(): SavedState[] {
-	if (typeof window === "undefined") {
-		return [];
-	}
-
-	try {
-		const raw = window.localStorage.getItem(SAVES_STORAGE_KEY);
-		if (!raw) {
-			return [];
-		}
-
-		const parsed = JSON.parse(raw) as { saves?: unknown } | unknown;
-		const items =
-			parsed && typeof parsed === "object" && "saves" in parsed
-				? (parsed as { saves?: unknown }).saves
-				: parsed;
-
-		if (!Array.isArray(items)) {
-			return [];
-		}
-
-		return items
-			.map((item) => {
-				if (!item || typeof item !== "object") {
-					return null;
-				}
-
-				const candidate = item as Partial<SavedState>;
-				const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
-				const threads = normalizeThreads(candidate.threads);
-				if (!name || !threads) {
-					return null;
-				}
-
-				const createdAt =
-					typeof candidate.createdAt === "string" && candidate.createdAt
-						? candidate.createdAt
-						: new Date().toISOString();
-				const updatedAt =
-					typeof candidate.updatedAt === "string" && candidate.updatedAt
-						? candidate.updatedAt
-						: createdAt;
-
-				return {
-					id:
-						typeof candidate.id === "string" && candidate.id.trim().length > 0
-							? candidate.id
-							: crypto.randomUUID(),
-					name,
-					createdAt,
-					updatedAt,
-					threads,
-				} satisfies SavedState;
-			})
-			.filter((item): item is SavedState => item !== null);
-	} catch {
-		return [];
-	}
-}
-
 // --- Workspace persistence ---
-
-function threadsAreEmpty(threads: Thread[]): boolean {
-	return threads.every((thread) => thread.code.trim() === "");
-}
-
-function migrateFromLegacy(): { workspaces: Workspace[]; activeId: string } {
-	const workspaces: Workspace[] = [];
-	const now = new Date().toISOString();
-
-	// Migrate saved states → workspaces
-	const savedStates = loadLegacySavedStates();
-	for (const saved of savedStates) {
-		workspaces.push({
-			id: saved.id,
-			name: saved.name,
-			createdAt: saved.createdAt,
-			updatedAt: saved.updatedAt,
-			threads: saved.threads,
-			undoStack: [],
-			redoStack: [],
-		});
-	}
-
-	// Migrate current working threads → workspace
-	const legacyThreads = loadLegacyThreads();
-	if (legacyThreads && !threadsAreEmpty(legacyThreads)) {
-		const currentWorkspace: Workspace = {
-			id: crypto.randomUUID(),
-			name: "Current",
-			createdAt: now,
-			updatedAt: now,
-			threads: legacyThreads,
-			undoStack: [],
-			redoStack: [],
-		};
-		workspaces.unshift(currentWorkspace);
-	}
-
-	// If nothing migrated, create initial workspace
-	if (workspaces.length === 0) {
-		const initial = createWorkspace("Getting started", createInitialThreads());
-		workspaces.push(initial);
-	}
-
-	const activeId = workspaces[0].id;
-	return { workspaces, activeId };
-}
 
 export function loadWorkspaces(): { workspaces: Workspace[]; activeId: string } {
 	if (typeof window === "undefined") {
@@ -357,19 +226,14 @@ export function loadWorkspaces(): { workspaces: Workspace[]; activeId: string } 
 	if (new URLSearchParams(window.location.search).has("reset")) {
 		window.localStorage.removeItem(WORKSPACES_STORAGE_KEY);
 		window.localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
-		window.localStorage.removeItem(STORAGE_KEY);
-		window.localStorage.removeItem(SAVES_STORAGE_KEY);
 		window.history.replaceState(null, "", window.location.pathname);
 	}
 
 	try {
 		const raw = window.localStorage.getItem(WORKSPACES_STORAGE_KEY);
 		if (!raw) {
-			// Try migration
-			const migrated = migrateFromLegacy();
-			persistWorkspaces(migrated.workspaces);
-			persistActiveWorkspaceId(migrated.activeId);
-			return migrated;
+			const initial = createWorkspace("Getting started", createInitialThreads());
+			return { workspaces: [initial], activeId: initial.id };
 		}
 
 		const parsed = JSON.parse(raw) as unknown[];

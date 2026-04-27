@@ -84,14 +84,6 @@ export type ConnectorOverlay = {
 	connectors: ConnectorPath[];
 };
 
-export type SavedState = {
-	id: string;
-	name: string;
-	createdAt: string;
-	updatedAt: string;
-	threads: Thread[];
-};
-
 /** A workspace is a named collection of threads with its own undo history. */
 export type Workspace = {
 	id: string;
