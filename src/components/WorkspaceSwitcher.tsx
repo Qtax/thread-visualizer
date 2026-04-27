@@ -271,6 +271,14 @@ function formatDate(isoString: string): string {
 	}
 }
 
+function formatExactDate(isoString: string): string {
+	try {
+		return new Date(isoString).toLocaleString();
+	} catch {
+		return isoString;
+	}
+}
+
 // --- Component ---
 
 type WorkspaceSwitcherProps = {
@@ -469,9 +477,17 @@ export function WorkspaceSwitcher({
 										<ItemName>{workspace.name}</ItemName>
 									)}
 									<ItemMeta>
-										Created {formatDate(workspace.createdAt)}
+										<span
+											title={`Created ${formatExactDate(workspace.createdAt)}`}
+										>
+											Created {formatDate(workspace.createdAt)}
+										</span>
 										{" · "}
-										Modified {formatDate(workspace.updatedAt)}
+										<span
+											title={`Modified ${formatExactDate(workspace.updatedAt)}`}
+										>
+											Modified {formatDate(workspace.updatedAt)}
+										</span>
 										{" · "}
 										{workspace.threads.length} thread
 										{workspace.threads.length !== 1 ? "s" : ""}
