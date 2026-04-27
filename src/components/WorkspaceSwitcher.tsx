@@ -544,7 +544,7 @@ export function WorkspaceSwitcher({
 									title={
 										gettingStartedUpdateAvailable
 											? "A newer Getting started is available"
-											: "Replace with a fresh Getting started workspace"
+											: undefined
 									}
 								>
 									↻ Restore Getting started
