@@ -11,6 +11,14 @@ import {
 	persistActiveWorkspaceId,
 	persistWorkspaces,
 } from "../lib/persistence";
+import {
+	buildShareUrl,
+	clearShareHash,
+	decodeShare,
+	encodeShare,
+	readShareTokenFromHash,
+	workspaceMatchesPayload,
+} from "../lib/share";
 import type { CursorPosition, Thread, UndoEntry, Workspace } from "../lib/thread-visualizer-types";
 
 type UseWorkspaceManagerResult = {
@@ -52,6 +60,9 @@ type UseWorkspaceManagerResult = {
 	importState: (event: ChangeEvent<HTMLInputElement>) => void;
 	openImportPicker: () => void;
 	exportWorkspaces: (workspaceIds: string[]) => void;
+
+	// Share
+	shareWorkspace: () => Promise<string | null>;
 
 	// For external undo integration
 	pushUndoSnapshot: (cursorOverrides?: Record<string, CursorPosition>) => void;
@@ -676,6 +687,72 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		[state.workspaces]
 	);
 
+	// --- Share: consume #share=... on mount and on hashchange ---
+	// If an existing workspace is byte-identical to the payload, switch to it
+	// (no duplicate). Otherwise add a fresh workspace. Editing it later breaks
+	// the equality check, so reopening the link will then add a fresh copy.
+	useEffect(() => {
+		let cancelled = false;
+
+		const consume = () => {
+			const token = readShareTokenFromHash();
+			if (!token) {
+				return;
+			}
+			decodeShare(token).then((payload) => {
+				if (cancelled || !payload) {
+					return;
+				}
+				setState((current) => {
+					const existing = current.workspaces.find((w) =>
+						workspaceMatchesPayload(w, payload)
+					);
+					if (existing) {
+						return current.activeId === existing.id
+							? current
+							: { ...current, activeId: existing.id };
+					}
+					const threads: Thread[] = payload.threads.map((t) => ({
+						id: crypto.randomUUID(),
+						name: t.name,
+						code: t.code,
+					}));
+					const ws = createWorkspace(payload.name || "Shared", threads);
+					return {
+						workspaces: [...current.workspaces, ws],
+						activeId: ws.id,
+					};
+				});
+				clearShareHash();
+			});
+		};
+
+		consume();
+		window.addEventListener("hashchange", consume);
+		return () => {
+			cancelled = true;
+			window.removeEventListener("hashchange", consume);
+		};
+	}, []);
+
+	const shareWorkspace = useCallback(async (): Promise<string | null> => {
+		const ws = state.workspaces.find((w) => w.id === state.activeId);
+		if (!ws) {
+			return null;
+		}
+		const token = await encodeShare({
+			name: ws.name,
+			threads: ws.threads.map((t) => ({ name: t.name, code: t.code })),
+		});
+		const url = buildShareUrl(token);
+		try {
+			await navigator.clipboard.writeText(url);
+		} catch {
+			// Clipboard may be unavailable (e.g., insecure context).
+		}
+		return url;
+	}, [state]);
+
 	return {
 		threads,
 		addThread,
@@ -705,6 +782,8 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		importState,
 		openImportPicker,
 		exportWorkspaces,
+
+		shareWorkspace,
 
 		pushUndoSnapshot,
 	};

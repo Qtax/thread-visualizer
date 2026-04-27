@@ -129,6 +129,8 @@ export default function ThreadCallPathVisualizer() {
 		openImportPicker,
 		exportWorkspaces,
 
+		shareWorkspace,
+
 		pushUndoSnapshot,
 	} = useWorkspaceManager();
 	const threadTrackTemplate = `repeat(${threads.length}, minmax(300px, 1fr))`;
@@ -168,6 +170,7 @@ export default function ThreadCallPathVisualizer() {
 					onAddThread={addThread}
 					onUndo={undo}
 					onRedo={redo}
+					onShare={shareWorkspace}
 				/>
 
 				<ThreadCanvasViewport>

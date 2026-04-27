@@ -1,4 +1,5 @@
 import type { ChangeEvent, MutableRefObject } from "react";
+import { useState } from "react";
 
 import { styled } from "@linaria/react";
 
@@ -78,6 +79,7 @@ type ThreadToolbarProps = {
 	onAddThread: () => void;
 	onUndo: () => void;
 	onRedo: () => void;
+	onShare: () => Promise<string | null>;
 };
 
 export function ThreadToolbar({
@@ -100,7 +102,18 @@ export function ThreadToolbar({
 	onAddThread,
 	onUndo,
 	onRedo,
+	onShare,
 }: ThreadToolbarProps) {
+	const [shareLabel, setShareLabel] = useState("Share");
+
+	const handleShare = async () => {
+		const url = await onShare();
+		if (url) {
+			setShareLabel("Copied!");
+			window.setTimeout(() => setShareLabel("Share"), 1500);
+		}
+	};
+
 	return (
 		<Toolbar>
 			<ToolbarActions>
@@ -150,6 +163,16 @@ export function ThreadToolbar({
 					title="Redo (Ctrl+Y)"
 				>
 					↪
+				</ControlButton>
+
+				<Separator />
+
+				<ControlButton
+					type="button"
+					onClick={handleShare}
+					title="Copy shareable link to current workspace"
+				>
+					🔗 {shareLabel}
 				</ControlButton>
 			</ToolbarActions>
 
