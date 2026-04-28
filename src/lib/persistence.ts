@@ -10,7 +10,7 @@ export const MAX_UNDO_ENTRIES = 200;
  * Bump whenever `createInitialThreads` content changes so existing users are
  * offered an update (compared against the workspace's `createdAt`).
  */
-export const GETTING_STARTED_TEMPLATE_DATE = "2026-04-27T10:44:30.000Z";
+export const GETTING_STARTED_TEMPLATE_DATE = "2026-04-28T09:04:00Z";
 export const GETTING_STARTED_NAME = "Getting started";
 
 function createInitialThreads(): Thread[] {
@@ -38,6 +38,8 @@ function createInitialThreads(): Thread[] {
 				"wait for completion [wait worker.done]",
 				"",
 				"shutdown()",
+				"",
+				"[sync error-handling]",
 				"",
 				"### detects cycles",
 				"[wait a]",
@@ -72,6 +74,8 @@ function createInitialThreads(): Thread[] {
 				"get more data",
 				"process task",
 				"processing done [set worker.done]",
+				"",
+				"[sync error-handling]",
 				"",
 				"### detects cycles",
 				"[wait b]",
