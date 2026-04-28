@@ -755,21 +755,10 @@ export function computeAlignmentPlanFromBaseTops(
 	const emptyPlan = (): ZonePlan =>
 		Object.fromEntries(threadIds.map((threadId) => [threadId, {}]));
 
-	const effectiveTop = (occurrence: SyncGroupOccurrence, plan: ZonePlan): number | undefined => {
-		const baseTop = baseTops[occurrence.threadId]?.[occurrence.lineNumber];
-		if (baseTop === undefined) {
-			return undefined;
-		}
-
-		const threadPlan = plan[occurrence.threadId] ?? {};
-		let total = baseTop + getAccumulatedOffset(threadPlan, occurrence.lineNumber);
-		const ownAdjustment = threadPlan[occurrence.lineNumber];
-		if (ownAdjustment?.placement === "after") {
-			total += ownAdjustment.height;
-		}
-		return total;
-	};
-
+	// Top of the occurrence's line excluding the occurrence's OWN zone at
+	// that line. This is the "natural" top to compare against when computing
+	// alignment targets — including the own zone would lock in stale values
+	// from prior passes (recordZone keeps the max, so it can't shrink).
 	const baseTopExcludingOwn = (
 		occurrence: SyncGroupOccurrence,
 		plan: ZonePlan
@@ -814,7 +803,7 @@ export function computeAlignmentPlanFromBaseTops(
 				const measurable = group.occurrences
 					.map((occurrence) => ({
 						occurrence,
-						top: effectiveTop(occurrence, prevPlan),
+						top: baseTopExcludingOwn(occurrence, prevPlan),
 					}))
 					.filter(
 						(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
@@ -827,12 +816,8 @@ export function computeAlignmentPlanFromBaseTops(
 
 				const targetTop = Math.max(...measurable.map((entry) => entry.top));
 
-				measurable.forEach(({ occurrence }) => {
-					const baseExcl = baseTopExcludingOwn(occurrence, prevPlan);
-					if (baseExcl === undefined) {
-						return;
-					}
-					recordZone(nextPlan, occurrence, targetTop - baseExcl);
+				measurable.forEach(({ occurrence, top }) => {
+					recordZone(nextPlan, occurrence, targetTop - top);
 				});
 				return;
 			}
@@ -848,7 +833,7 @@ export function computeAlignmentPlanFromBaseTops(
 				.filter((occurrence) => occurrence.kind === "set")
 				.map((occurrence) => ({
 					occurrence,
-					top: effectiveTop(occurrence, prevPlan),
+					top: baseTopExcludingOwn(occurrence, prevPlan),
 				}))
 				.filter(
 					(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
@@ -859,7 +844,7 @@ export function computeAlignmentPlanFromBaseTops(
 				const measurableWaits = waitOccurrences
 					.map((occurrence) => ({
 						occurrence,
-						top: effectiveTop(occurrence, prevPlan),
+						top: baseTopExcludingOwn(occurrence, prevPlan),
 					}))
 					.filter(
 						(entry): entry is { occurrence: SyncGroupOccurrence; top: number } =>
@@ -872,17 +857,13 @@ export function computeAlignmentPlanFromBaseTops(
 
 				const targetTop = Math.max(...measurableWaits.map((entry) => entry.top));
 
-				measurableWaits.forEach(({ occurrence }) => {
-					const baseExcl = baseTopExcludingOwn(occurrence, prevPlan);
-					if (baseExcl === undefined) {
-						return;
-					}
-					recordZone(nextPlan, occurrence, targetTop - baseExcl);
+				measurableWaits.forEach(({ occurrence, top }) => {
+					recordZone(nextPlan, occurrence, targetTop - top);
 				});
 				return;
 			}
 
-			// Anchor = the first-in-time set (smallest current top). Only the first
+			// Anchor = the first-in-time set (smallest natural top). Only the first
 			// set matters; later sets do not constrain waits.
 			const anchorSet = measurableSets.reduce((best, current) =>
 				current.top < best.top ? current : best
@@ -978,12 +959,8 @@ function makeZoneDom(
 	const node = document.createElement("div");
 	const model = editor.getModel();
 	const modelOptions = model?.getOptions();
-	const rawIndentSize = modelOptions?.indentSize;
-	const indentSize =
-		rawIndentSize === "tabSize"
-			? (modelOptions?.tabSize ?? 4)
-			: (rawIndentSize ?? modelOptions?.tabSize ?? 4);
 	const tabSize = modelOptions?.tabSize ?? 4;
+	const indentSize = modelOptions?.indentSize ?? tabSize;
 	const fontInfo = editor.getOption(monaco.editor.EditorOption.fontInfo);
 	const indentStepPx = Math.max(fontInfo.spaceWidth * Math.max(indentSize, 1), 1);
 	const guideCount = model
