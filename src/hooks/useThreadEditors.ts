@@ -7,8 +7,6 @@ import {
 	connectorOverlayEquals,
 } from "../lib/connector-geometry";
 import {
-	addViewZone,
-	clearViewZones,
 	collectMatchedSyncGroups,
 	collectLineCommentDecorations,
 	collectSyncLineDecorations,
@@ -16,9 +14,14 @@ import {
 	collectSyncTagDecorations,
 	computeAlignmentPlanFromBaseTops,
 	detectHarmfulSyncCycles,
+	zonePlansEqual,
+} from "../lib/sync-layout";
+import {
+	addViewZone,
+	clearViewZones,
 	getSyncDecorationClassName,
 	getSyncInlineTagClassName,
-} from "../lib/sync-utils";
+} from "../lib/sync-monaco";
 import type {
 	ConnectorOverlay,
 	ConnectorPath,
@@ -449,30 +452,24 @@ export function useThreadEditors(
 		pendingApplyViewZonesRef.current = false;
 		isApplyingZonesRef.current = true;
 
-		threads.forEach((thread) => {
-			const editor = editorsRef.current[thread.id];
-			if (!editor) {
-				return;
-			}
-
-			clearViewZones(editor, viewZoneIdsRef.current[thread.id] ?? []);
-			viewZoneIdsRef.current[thread.id] = [];
-			editor.render();
-		});
-
 		const { groups, errors } = collectMatchedSyncGroups(threads);
-		zonePlanRef.current = {};
-		cyclicIdsRef.current = new Set();
 		const errorMap = new Map<string, string>();
 		errors.forEach(({ threadId, id, kind, lineNumber, reason }) => {
 			const key = `${threadId}:${lineNumber}:${id}:${kind}`;
 			errorMap.set(key, formatSyncErrorReason(reason, id));
 		});
 		markerErrorsRef.current = errorMap;
+
+		// Compute the next plan WITHOUT clearing zones first: measure tops as
+		// Monaco currently sees them (with previously-applied zones in place),
+		// then subtract back out the heights of zones strictly above each line
+		// to recover the natural top. This lets us short-circuit when the plan
+		// is structurally unchanged so we don't churn DOM and re-fire
+		// `onDidContentSizeChange` in a tight loop (the wait area visibly
+		// re-renders every frame).
+		let nextPlan: ZonePlan = {};
+		let nextCyclicIds: Set<string> = new Set();
 		if (groups.length > 0) {
-			// baseTops must cover every set/sync/wait line we may inspect, both
-			// for alignment and for cycle detection (which considers all set
-			// instances across threads to pick the global anchor).
 			const baseTops: Record<string, Record<number, number>> = {};
 			const recordTop = (threadId: string, lineNumber: number) => {
 				const editor = editorsRef.current[threadId];
@@ -482,9 +479,22 @@ export function useThreadEditors(
 				if (!baseTops[threadId]) {
 					baseTops[threadId] = {};
 				}
-				if (baseTops[threadId][lineNumber] === undefined) {
-					baseTops[threadId][lineNumber] = editor.getTopForLineNumber(lineNumber);
+				if (baseTops[threadId][lineNumber] !== undefined) {
+					return;
 				}
+				const measured = editor.getTopForLineNumber(lineNumber);
+				const threadZones = zonePlanRef.current[threadId] ?? {};
+				let appliedAbove = 0;
+				for (const [rawLine, adjustment] of Object.entries(threadZones)) {
+					const zoneLine = Number(rawLine);
+					if (
+						zoneLine < lineNumber ||
+						(zoneLine === lineNumber && adjustment.placement === "before")
+					) {
+						appliedAbove += adjustment.height;
+					}
+				}
+				baseTops[threadId][lineNumber] = measured - appliedAbove;
 			};
 
 			groups.forEach((group) => {
@@ -502,40 +512,62 @@ export function useThreadEditors(
 			const groupStrategyById = new Map(
 				groups.map((group) => [group.id, group.strategy] as const)
 			);
-			const cyclicIds = detectHarmfulSyncCycles(
+			nextCyclicIds = detectHarmfulSyncCycles(
 				threads,
 				matchedIds,
 				baseTops,
 				groupStrategyById
 			);
-			cyclicIdsRef.current = cyclicIds;
 
 			const activeGroups =
-				cyclicIds.size === 0 ? groups : groups.filter((group) => !cyclicIds.has(group.id));
+				nextCyclicIds.size === 0
+					? groups
+					: groups.filter((group) => !nextCyclicIds.has(group.id));
 
-			const plan = computeAlignmentPlanFromBaseTops(activeGroups, baseTops);
-			zonePlanRef.current = plan;
-
-			threads.forEach((thread) => {
-				const editor = editorsRef.current[thread.id];
-				if (!editor) {
-					return;
-				}
-
-				const zoneIds: string[] = [];
-				Object.entries(plan[thread.id] ?? {})
-					.filter(([, adjustment]) => adjustment.height > 0.5)
-					.sort((a, b) => Number(a[0]) - Number(b[0]))
-					.forEach(([rawLine, adjustment]) => {
-						zoneIds.push(
-							addViewZone(editor, monacoRef.current!, Number(rawLine), adjustment)
-						);
-					});
-
-				viewZoneIdsRef.current[thread.id] = zoneIds;
-				editor.render();
-			});
+			nextPlan = computeAlignmentPlanFromBaseTops(activeGroups, baseTops);
 		}
+
+		const planUnchanged = zonePlansEqual(nextPlan, zonePlanRef.current);
+		const cyclicUnchanged =
+			nextCyclicIds.size === cyclicIdsRef.current.size &&
+			[...nextCyclicIds].every((id) => cyclicIdsRef.current.has(id));
+
+		if (planUnchanged && cyclicUnchanged) {
+			// Refresh decorations (cheap, idempotent) but skip view-zone work.
+			threads.forEach((thread) => applySyncDecorations(thread.id, thread.code));
+			isApplyingZonesRef.current = false;
+			if (pendingApplyViewZonesRef.current) {
+				pendingApplyViewZonesRef.current = false;
+				requestAnimationFrame(() => applyViewZonesRef.current());
+			}
+			return;
+		}
+
+		zonePlanRef.current = nextPlan;
+		cyclicIdsRef.current = nextCyclicIds;
+
+		threads.forEach((thread) => {
+			const editor = editorsRef.current[thread.id];
+			if (!editor) {
+				return;
+			}
+
+			clearViewZones(editor, viewZoneIdsRef.current[thread.id] ?? []);
+			viewZoneIdsRef.current[thread.id] = [];
+
+			const zoneIds: string[] = [];
+			Object.entries(nextPlan[thread.id] ?? {})
+				.filter(([, adjustment]) => adjustment.height > 0.5)
+				.sort((a, b) => Number(a[0]) - Number(b[0]))
+				.forEach(([rawLine, adjustment]) => {
+					zoneIds.push(
+						addViewZone(editor, monacoRef.current!, Number(rawLine), adjustment)
+					);
+				});
+
+			viewZoneIdsRef.current[thread.id] = zoneIds;
+			editor.render();
+		});
 
 		threads.forEach((thread) => {
 			syncEditorHeight(thread.id);
