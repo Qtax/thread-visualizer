@@ -1,6 +1,6 @@
 # Thread Call Path Visualizer
 
-A web app for writing multi-threaded call flows side by side and aligning sync points in time.
+A web app for writing multi-threaded call flows/traces side by side and aligning sync points in time.
 
 https://qtax.github.io/thread-visualizer
 
