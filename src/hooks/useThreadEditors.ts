@@ -821,8 +821,6 @@ export function useThreadEditors(
 				editor.updateOptions({
 					lineHeight: DEFAULT_EDITOR_LINE_HEIGHT,
 					fontSize: DEFAULT_EDITOR_FONT_SIZE,
-					fontFamily:
-						"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
 					tabSize: DEFAULT_EDITOR_TAB_SIZE,
 					insertSpaces: false,
 					// Render hover/suggestion widgets in a fixed-position layer

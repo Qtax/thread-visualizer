@@ -2,6 +2,7 @@ import Editor from "@monaco-editor/react";
 import { styled } from "@linaria/react";
 import type * as Monaco from "monaco-editor";
 
+import { THREAD_LANGUAGE_ID, configureThreadLanguage } from "../lib/thread-language";
 import type { Thread } from "../lib/thread-visualizer-types";
 import { palette } from "../styles/ui";
 
@@ -79,10 +80,11 @@ export function ThreadColumn({
 				<ThreadEditorInset>
 					<Editor
 						path={`thread-${thread.id}.txt`}
-						defaultLanguage="plaintext"
+						language={THREAD_LANGUAGE_ID}
 						theme="vs"
 						height={sharedEditorHeight}
 						value={thread.code}
+						beforeMount={configureThreadLanguage}
 						onChange={(value) => onCodeChange(thread.id, value ?? "")}
 						onMount={onMount(thread.id)}
 						options={THREAD_EDITOR_OPTIONS}
