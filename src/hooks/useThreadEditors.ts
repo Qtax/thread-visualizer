@@ -40,6 +40,113 @@ const COMPACT_EDITOR_LINE_HEIGHT = 18;
 const COMPACT_EDITOR_TAB_SIZE = 2;
 const COMPACT_EDITOR_WIDTH_THRESHOLD = 600;
 
+function revealPositionInWindow(
+	editor: Monaco.editor.IStandaloneCodeEditor,
+	position: Monaco.IPosition
+): void {
+	const node = editor.getDomNode();
+	if (!node || typeof window === "undefined") {
+		return;
+	}
+
+	const visiblePosition = editor.getScrolledVisiblePosition(position);
+	if (!visiblePosition) {
+		return;
+	}
+
+	const nodeRect = node.getBoundingClientRect();
+	const cursorTop = nodeRect.top + visiblePosition.top;
+	const cursorBottom = cursorTop + visiblePosition.height;
+	const viewportTop = 8;
+	const viewportBottom = window.innerHeight - 16;
+
+	if (cursorTop < viewportTop) {
+		window.scrollBy(0, cursorTop - viewportTop);
+	} else if (cursorBottom > viewportBottom) {
+		window.scrollBy(0, cursorBottom - viewportBottom);
+	}
+}
+
+function createPointerDownCursorPrepositioner(
+	editor: Monaco.editor.IStandaloneCodeEditor,
+	monaco: typeof import("monaco-editor"),
+	setPointerActive: (active: boolean) => void
+): Monaco.IDisposable | null {
+	const node = editor.getDomNode();
+	if (!node || typeof window === "undefined" || typeof document === "undefined") {
+		return null;
+	}
+
+	let timerId: number | null = null;
+	const eventName = typeof PointerEvent === "undefined" ? "mousedown" : "pointerdown";
+	const endEventName = typeof PointerEvent === "undefined" ? "mouseup" : "pointerup";
+	const cancelEventName = typeof PointerEvent === "undefined" ? null : "pointercancel";
+
+	const deactivatePointerMode = () => {
+		setPointerActive(false);
+		document.removeEventListener(endEventName, deactivatePointerMode, true);
+		if (cancelEventName) {
+			document.removeEventListener(cancelEventName, deactivatePointerMode, true);
+		}
+		if (timerId !== null) {
+			window.clearTimeout(timerId);
+			timerId = null;
+		}
+	};
+
+	const activatePointerMode = () => {
+		setPointerActive(true);
+		document.removeEventListener(endEventName, deactivatePointerMode, true);
+		if (cancelEventName) {
+			document.removeEventListener(cancelEventName, deactivatePointerMode, true);
+		}
+		document.addEventListener(endEventName, deactivatePointerMode, true);
+		if (cancelEventName) {
+			document.addEventListener(cancelEventName, deactivatePointerMode, true);
+		}
+		if (timerId !== null) {
+			window.clearTimeout(timerId);
+		}
+		timerId = window.setTimeout(deactivatePointerMode, 1000);
+	};
+
+	const hasCursorPosition = (target: Monaco.editor.IMouseTarget) =>
+		target.type === monaco.editor.MouseTargetType.CONTENT_TEXT ||
+		target.type === monaco.editor.MouseTargetType.CONTENT_EMPTY ||
+		target.type === monaco.editor.MouseTargetType.CONTENT_VIEW_ZONE ||
+		target.type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS ||
+		target.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS ||
+		target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+		target.type === monaco.editor.MouseTargetType.GUTTER_VIEW_ZONE;
+
+	const handlePointerStart = (event: MouseEvent | PointerEvent) => {
+		if (event.button !== 0) {
+			return;
+		}
+
+		activatePointerMode();
+
+		const target = editor.getTargetAtClientPoint(event.clientX, event.clientY);
+		if (!target?.position || !hasCursorPosition(target)) {
+			return;
+		}
+
+		const model = editor.getModel();
+		const position = model ? model.validatePosition(target.position) : target.position;
+		editor.setPosition(position);
+		editor.render();
+	};
+
+	node.addEventListener(eventName, handlePointerStart, { capture: true });
+
+	return {
+		dispose: () => {
+			node.removeEventListener(eventName, handlePointerStart, { capture: true });
+			deactivatePointerMode();
+		},
+	};
+}
+
 function formatSyncErrorReason(reason: SyncMarkerErrorReason, id: string): string {
 	switch (reason) {
 		case "wait-without-set":
@@ -91,6 +198,9 @@ export function useThreadEditors(
 	const threadsContentRef = useRef<HTMLDivElement | null>(null);
 	const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
 	const editorsRef = useRef<Record<string, Monaco.editor.IStandaloneCodeEditor | null>>({});
+	const pointerDownCursorPrepositionersRef = useRef<Record<string, Monaco.IDisposable | null>>(
+		{}
+	);
 	const viewZoneIdsRef = useRef<Record<string, string[]>>({});
 	const zonePlanRef = useRef<ZonePlan>({});
 	const cyclicIdsRef = useRef<Set<string>>(new Set());
@@ -110,6 +220,10 @@ export function useThreadEditors(
 	pushUndoSnapshotRef.current = pushUndoSnapshot;
 	const contentChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const hasPendingSnapshotRef = useRef(false);
+	const disposePointerDownCursorPrepositioner = useCallback((threadId: string) => {
+		pointerDownCursorPrepositionersRef.current[threadId]?.dispose();
+		delete pointerDownCursorPrepositionersRef.current[threadId];
+	}, []);
 	const getCursors = useCallback((): Record<string, CursorPosition> => {
 		const positions: Record<string, CursorPosition> = {};
 		for (const [threadId, editor] of Object.entries(editorsRef.current)) {
@@ -132,6 +246,7 @@ export function useThreadEditors(
 			const clamped = model.validatePosition(position);
 			editor.setPosition(clamped);
 			editor.revealPositionInCenterIfOutsideViewport(clamped);
+			revealPositionInWindow(editor, clamped);
 		}
 	}, []);
 
@@ -622,10 +737,20 @@ export function useThreadEditors(
 	}, [updateConnectorOverlay]);
 
 	useEffect(() => {
+		return () => {
+			Object.values(pointerDownCursorPrepositionersRef.current).forEach((disposable) =>
+				disposable?.dispose()
+			);
+			pointerDownCursorPrepositionersRef.current = {};
+		};
+	}, []);
+
+	useEffect(() => {
 		const activeThreadIds = new Set(threads.map((thread) => thread.id));
 
 		Object.keys(editorsRef.current).forEach((threadId) => {
 			if (!activeThreadIds.has(threadId)) {
+				disposePointerDownCursorPrepositioner(threadId);
 				delete editorsRef.current[threadId];
 			}
 		});
@@ -656,7 +781,7 @@ export function useThreadEditors(
 				? current
 				: Object.fromEntries(nextEntries);
 		});
-	}, [threads]);
+	}, [disposePointerDownCursorPrepositioner, threads]);
 
 	useLayoutEffect(() => {
 		applyViewZonesRef.current = applyViewZones;
@@ -671,7 +796,27 @@ export function useThreadEditors(
 				monaco: typeof import("monaco-editor")
 			) => {
 				monacoRef.current = monaco;
+				disposePointerDownCursorPrepositioner(threadId);
 				editorsRef.current[threadId] = editor;
+				let isPointerCursorChange = false;
+				const pointerDownCursorPrepositioner = createPointerDownCursorPrepositioner(
+					editor,
+					monaco,
+					(active) => {
+						isPointerCursorChange = active;
+					}
+				);
+				pointerDownCursorPrepositionersRef.current[threadId] =
+					pointerDownCursorPrepositioner;
+				editor.onDidDispose(() => {
+					if (editorsRef.current[threadId] !== editor) {
+						pointerDownCursorPrepositioner?.dispose();
+						return;
+					}
+
+					disposePointerDownCursorPrepositioner(threadId);
+					delete editorsRef.current[threadId];
+				});
 
 				editor.updateOptions({
 					lineHeight: DEFAULT_EDITOR_LINE_HEIGHT,
@@ -753,6 +898,12 @@ export function useThreadEditors(
 					}
 				});
 
+				editor.onDidChangeCursorPosition((event) => {
+					if (!isPointerCursorChange) {
+						revealPositionInWindow(editor, event.position);
+					}
+				});
+
 				editor.onKeyDown((event) => {
 					if (event.keyCode !== monaco.KeyCode.Tab) {
 						return;
@@ -796,6 +947,7 @@ export function useThreadEditors(
 			applySyncDecorations,
 			applySelectionHighlights,
 			applyViewZones,
+			disposePointerDownCursorPrepositioner,
 			syncEditorFontSize,
 			syncEditorHeight,
 			threads,
