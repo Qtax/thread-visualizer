@@ -71,10 +71,10 @@ function createPointerDownCursorPrepositioner(
 	editor: Monaco.editor.IStandaloneCodeEditor,
 	monaco: typeof import("monaco-editor"),
 	setPointerActive: (active: boolean) => void
-): Monaco.IDisposable | null {
+): Monaco.IDisposable | undefined {
 	const node = editor.getDomNode();
 	if (!node || typeof window === "undefined" || typeof document === "undefined") {
-		return null;
+		return undefined;
 	}
 
 	let timerId: number | null = null;
@@ -198,9 +198,7 @@ export function useThreadEditors(
 	const threadsContentRef = useRef<HTMLDivElement | null>(null);
 	const monacoRef = useRef<typeof import("monaco-editor") | null>(null);
 	const editorsRef = useRef<Record<string, Monaco.editor.IStandaloneCodeEditor | null>>({});
-	const pointerDownCursorPrepositionersRef = useRef<Record<string, Monaco.IDisposable | null>>(
-		{}
-	);
+	const pointerDownCursorPrepositionersRef = useRef<Record<string, Monaco.IDisposable>>({});
 	const viewZoneIdsRef = useRef<Record<string, string[]>>({});
 	const zonePlanRef = useRef<ZonePlan>({});
 	const cyclicIdsRef = useRef<Set<string>>(new Set());
@@ -310,8 +308,7 @@ export function useThreadEditors(
 			return;
 		}
 
-		const trimmed = selectedText;
-		const hasSelection = trimmed.length >= 2 && !trimmed.includes("\n");
+		const hasSelection = selectedText.length >= 2 && !selectedText.includes("\n");
 
 		for (const [threadId, editor] of Object.entries(editorsRef.current)) {
 			if (!editor) {
@@ -334,7 +331,7 @@ export function useThreadEditors(
 				continue;
 			}
 
-			const matches = model.findMatches(trimmed, false, false, false, null, false);
+			const matches = model.findMatches(selectedText, false, false, false, null, false);
 			collection.set(
 				matches.map((match) => ({
 					range: match.range,
@@ -806,8 +803,10 @@ export function useThreadEditors(
 						isPointerCursorChange = active;
 					}
 				);
-				pointerDownCursorPrepositionersRef.current[threadId] =
-					pointerDownCursorPrepositioner;
+				if (pointerDownCursorPrepositioner) {
+					pointerDownCursorPrepositionersRef.current[threadId] =
+						pointerDownCursorPrepositioner;
+				}
 				editor.onDidDispose(() => {
 					if (editorsRef.current[threadId] !== editor) {
 						pointerDownCursorPrepositioner?.dispose();

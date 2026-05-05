@@ -4,11 +4,6 @@ export type Thread = {
 	code: string;
 };
 
-export type SyncOccurrence = {
-	id: string;
-	lineNumber: number;
-};
-
 export type SyncTagKind = "sync" | "wait" | "set";
 
 export type SyncLineDecoration = {

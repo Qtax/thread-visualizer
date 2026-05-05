@@ -5,7 +5,6 @@ import type {
 	SyncLineDecoration,
 	SyncMarker,
 	SyncMarkerError,
-	SyncOccurrence,
 	SyncTagDecoration,
 	SyncTagKind,
 	Thread,
@@ -14,6 +13,11 @@ import type {
 } from "./thread-visualizer-types";
 
 export const SYNC_PATTERN = /\[(sync|wait|set)\s+([^\]]+?)\]/gi;
+
+type SyncOccurrence = {
+	id: string;
+	lineNumber: number;
+};
 
 function getLineCommentStart(line: string): number {
 	return line.indexOf("#");
@@ -24,7 +28,7 @@ function getLineCodeSegment(line: string): string {
 	return commentStart === -1 ? line : line.slice(0, commentStart);
 }
 
-export function parseFirstSyncs(text: string): SyncOccurrence[] {
+function parseFirstSyncs(text: string): SyncOccurrence[] {
 	const seen = new Set<string>();
 	const lines = text.split(/\r?\n/);
 	const occurrences: SyncOccurrence[] = [];

@@ -10,7 +10,7 @@ import { ThreadToolbar } from "./components/ThreadToolbar";
 import { useThreadEditors } from "./hooks/useThreadEditors";
 import { useWorkspaceManager } from "./hooks/useWorkspaceManager";
 import { SYNC_DECORATION_COLOR_VALUES } from "./lib/sync-decoration-colors";
-import { AppSurface, WorkspaceFrame, globalStyles, palette } from "./styles/ui";
+import { AppSurface, WorkspaceFrame, globalStyles } from "./styles/ui";
 
 const syncDecorationStyles = css`
 	:global(:root) {
