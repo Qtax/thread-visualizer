@@ -413,6 +413,7 @@ export function useThreadEditors(
 
 		const canvasRect = canvas.getBoundingClientRect();
 		const groups = new Map<string, { set: ConnectorEndpoint[]; wait: ConnectorEndpoint[] }>();
+		const syncGroups = new Map<string, ConnectorEndpoint[]>();
 
 		threads.forEach((thread) => {
 			const editor = editorsRef.current[thread.id];
@@ -426,8 +427,9 @@ export function useThreadEditors(
 			const rightX = editorRect.right - canvasRect.left - 10;
 			const centerX = editorRect.left - canvasRect.left + editorRect.width / 2;
 
+			const seenSyncIds = new Set<string>();
 			collectSyncMarkers(thread.code).forEach(({ id, kind, lineNumber }) => {
-				if (kind !== "set" && kind !== "wait") {
+				if (kind === "sync" && seenSyncIds.has(id)) {
 					return;
 				}
 
@@ -455,6 +457,19 @@ export function useThreadEditors(
 					leftX,
 					rightX,
 				};
+
+				if (kind === "sync") {
+					seenSyncIds.add(id);
+					const endpoints = syncGroups.get(id) ?? [];
+					endpoints.push(entry);
+					syncGroups.set(id, endpoints);
+					return;
+				}
+
+				if (kind !== "set" && kind !== "wait") {
+					return;
+				}
+
 				const group = groups.get(id) ?? { set: [], wait: [] };
 				group[kind].push(entry);
 				groups.set(id, group);
@@ -535,8 +550,64 @@ export function useThreadEditors(
 						key: `${id}:anchor:${anchorSource.threadId}:${anchorSource.lineNumber}:${targetIndex}:${target.threadId}:${target.lineNumber}`,
 						path: geometry.path,
 						arrowPath: geometry.arrowPath,
+						variant: "dependency",
 					});
 				});
+			});
+
+		[...syncGroups.entries()]
+			.sort(([leftId], [rightId]) => leftId.localeCompare(rightId))
+			.forEach(([id, endpoints]) => {
+				if (endpoints.length < 2) {
+					return;
+				}
+
+				const sortedEndpoints = [...endpoints].sort((left, right) => {
+					if (left.centerX !== right.centerX) {
+						return left.centerX - right.centerX;
+					}
+
+					if (left.y !== right.y) {
+						return left.y - right.y;
+					}
+
+					return left.lineNumber - right.lineNumber;
+				});
+
+				for (let index = 1; index < sortedEndpoints.length; index += 1) {
+					const source = sortedEndpoints[index - 1];
+					const target = sortedEndpoints[index];
+					const sameThread = source.threadId === target.threadId;
+					const targetIsRight = target.centerX >= source.centerX;
+					const useRightSide = sameThread
+						? target.threadId !== rightmostThreadId
+						: targetIsRight;
+					const start = {
+						x: useRightSide ? source.rightX : source.leftX,
+						y: source.y,
+					};
+					const end = {
+						x: sameThread
+							? useRightSide
+								? target.rightX
+								: target.leftX
+							: targetIsRight
+								? target.leftX
+								: target.rightX,
+						y: target.y,
+					};
+					const geometry = buildConnectorGeometry(start, end, {
+						arrow: false,
+						lateralSign: sameThread ? (useRightSide ? 1 : -1) : 1,
+					});
+
+					connectors.push({
+						id,
+						key: `${id}:sync:${index}:${source.threadId}:${source.lineNumber}:${target.threadId}:${target.lineNumber}`,
+						path: geometry.path,
+						variant: "sync",
+					});
+				}
 			});
 
 		const nextOverlay: ConnectorOverlay = {

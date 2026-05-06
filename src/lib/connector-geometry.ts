@@ -35,10 +35,11 @@ function buildArrowHead(point: Point, angle: number): { arrowPath: string; shaft
 export function buildConnectorGeometry(
 	start: Point,
 	end: Point,
-	options?: { lateralSign?: 1 | -1 }
-): Omit<ConnectorPath, "id" | "key"> {
+	options?: { lateralSign?: 1 | -1; arrow?: boolean }
+): Pick<ConnectorPath, "path" | "arrowPath"> {
 	const deltaX = end.x - start.x;
 	const deltaY = end.y - start.y;
+	const showArrow = options?.arrow ?? true;
 
 	if (Math.abs(deltaX) < 12) {
 		// Same-thread / same-side connector. Build a path that exits the
@@ -55,12 +56,8 @@ export function buildConnectorGeometry(
 		const startStubEnd = { x: start.x + lateralSign * stubLength, y: start.y };
 		const endStubStart = { x: end.x + lateralSign * stubLength, y: end.y };
 
-		// Arrowhead points back toward the editor edge along the stub.
-		const arrowAngle = Math.atan2(0, -lateralSign);
-		const arrow = buildArrowHead(end, arrowAngle);
-		// The shaft must end where the arrow begins; replace the inner stub
-		// endpoint accordingly so the path lines up with the arrow.
-		const stubInTarget = arrow.shaftEnd;
+		const arrow = showArrow ? buildArrowHead(end, Math.atan2(0, -lateralSign)) : undefined;
+		const stubInTarget = arrow?.shaftEnd ?? end;
 
 		const control1 = {
 			x: startStubEnd.x + lateralSign * lobeWidth,
@@ -78,7 +75,7 @@ export function buildConnectorGeometry(
 				` C ${control1.x} ${control1.y}, ${control2.x} ${control2.y},` +
 				` ${endStubStart.x} ${endStubStart.y}` +
 				` L ${stubInTarget.x} ${stubInTarget.y}`,
-			arrowPath: arrow.arrowPath,
+			arrowPath: arrow?.arrowPath,
 		};
 	}
 
@@ -86,12 +83,15 @@ export function buildConnectorGeometry(
 	const bend = Math.max(24, Math.min(96, Math.abs(deltaX) * 0.35 + Math.abs(deltaY) * 0.12));
 	const control1 = { x: start.x + direction * bend, y: start.y };
 	const rawControl2 = { x: end.x - direction * bend, y: end.y };
-	const arrow = buildArrowHead(end, Math.atan2(end.y - rawControl2.y, end.x - rawControl2.x));
-	const control2 = { x: arrow.shaftEnd.x - direction * bend, y: arrow.shaftEnd.y };
+	const arrow = showArrow
+		? buildArrowHead(end, Math.atan2(end.y - rawControl2.y, end.x - rawControl2.x))
+		: undefined;
+	const shaftEnd = arrow?.shaftEnd ?? end;
+	const control2 = showArrow ? { x: shaftEnd.x - direction * bend, y: shaftEnd.y } : rawControl2;
 
 	return {
-		path: `M ${start.x} ${start.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${arrow.shaftEnd.x} ${arrow.shaftEnd.y}`,
-		arrowPath: arrow.arrowPath,
+		path: `M ${start.x} ${start.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${shaftEnd.x} ${shaftEnd.y}`,
+		arrowPath: arrow?.arrowPath,
 	};
 }
 
@@ -109,6 +109,7 @@ export function connectorOverlayEquals(left: ConnectorOverlay, right: ConnectorO
 		return (
 			connector.id === next.id &&
 			connector.key === next.key &&
+			connector.variant === next.variant &&
 			connector.path === next.path &&
 			connector.arrowPath === next.arrowPath
 		);

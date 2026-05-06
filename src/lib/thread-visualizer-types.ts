@@ -70,7 +70,8 @@ export type ConnectorPath = {
 	id: string;
 	key: string;
 	path: string;
-	arrowPath: string;
+	arrowPath?: string;
+	variant: "dependency" | "sync";
 };
 
 export type ConnectorOverlay = {
