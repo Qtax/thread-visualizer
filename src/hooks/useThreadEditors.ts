@@ -7,6 +7,7 @@ import {
 	connectorOverlayEquals,
 } from "../lib/connector-geometry";
 import {
+	collectLineStyleDecorations,
 	collectMatchedSyncGroups,
 	collectLineCommentDecorations,
 	collectSyncLineDecorations,
@@ -19,6 +20,8 @@ import {
 import {
 	addViewZone,
 	clearViewZones,
+	getLineStyleTagClassName,
+	getLineStyleTextClassName,
 	getSyncDecorationClassName,
 	getSyncInlineTagClassName,
 } from "../lib/sync-monaco";
@@ -356,6 +359,7 @@ export function useThreadEditors(
 		const markerErrors = markerErrorsRef.current;
 		const lineDecorations = collectSyncLineDecorations(code);
 		const inlineTagDecorations = collectSyncTagDecorations(code);
+		const lineStyleDecorations = collectLineStyleDecorations(code);
 		const commentDecorations = collectLineCommentDecorations(code);
 		collection.set([
 			...lineDecorations.map(({ kind, lineNumber }) => ({
@@ -389,6 +393,19 @@ export function useThreadEditors(
 					},
 				};
 			}),
+			...lineStyleDecorations.tags.map(({ kind, lineNumber, startColumn, endColumn }) => ({
+				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
+				options: {
+					inlineClassName: getLineStyleTagClassName(kind),
+				},
+			})),
+			...lineStyleDecorations.text.map(({ kind, lineNumber, startColumn, endColumn }) => ({
+				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
+				options: {
+					inlineClassName: getLineStyleTextClassName(kind),
+					stickiness: monaco.editor.TrackedRangeStickiness.AlwaysGrowsWhenTypingAtEdges,
+				},
+			})),
 			...commentDecorations.map(({ lineNumber, startColumn, endColumn }) => ({
 				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
 				options: {

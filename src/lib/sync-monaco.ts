@@ -1,6 +1,6 @@
 import type * as Monaco from "monaco-editor";
 
-import type { SyncTagKind, ZoneAdjustment } from "./thread-visualizer-types";
+import type { LineStyleTagKind, SyncTagKind, ZoneAdjustment } from "./thread-visualizer-types";
 
 export function getSyncDecorationClassName(kind: SyncTagKind): string {
 	switch (kind) {
@@ -22,6 +22,14 @@ export function getSyncInlineTagClassName(kind: SyncTagKind): string {
 		default:
 			return "sync-inline-tag sync-inline-tag--sync";
 	}
+}
+
+export function getLineStyleTagClassName(kind: LineStyleTagKind): string {
+	return `line-style-tag line-style-tag--${kind}`;
+}
+
+export function getLineStyleTextClassName(kind: LineStyleTagKind): string {
+	return `line-style-text line-style-text--${kind}`;
 }
 
 export function clearViewZones(editor: Monaco.editor.IStandaloneCodeEditor, zoneIds: string[]) {

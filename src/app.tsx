@@ -54,6 +54,19 @@ const syncDecorationStyles = css`
 		text-underline-offset: 2px;
 	}
 
+	:global(.monaco-editor .line-style-tag) {
+		color: color-mix(in srgb, currentColor 60%, white);
+		opacity: 0.8;
+	}
+
+	:global(.monaco-editor .line-style-text--em) {
+		font-weight: bold;
+	}
+
+	:global(.monaco-editor .line-style-text--dim) {
+		color: color-mix(in srgb, currentColor 40%, white);
+	}
+
 	:global(.monaco-editor .selection-highlight) {
 		background: rgba(0, 120, 215, 0.15);
 		border-radius: 2px;

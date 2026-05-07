@@ -10,7 +10,7 @@ export const MAX_UNDO_ENTRIES = 200;
  * Bump whenever `createInitialThreads` content changes so existing users are
  * offered an update (compared against the workspace's `createdAt`).
  */
-export const GETTING_STARTED_TEMPLATE_DATE = "2026-04-28T09:04:00Z";
+export const GETTING_STARTED_TEMPLATE_DATE = "2026-05-07T12:00:00Z";
 export const GETTING_STARTED_NAME = "Getting started";
 
 function createInitialThreads(): Thread[] {
@@ -21,6 +21,8 @@ function createInitialThreads(): Thread[] {
 			code: [
 				"Write pseudo-code in each editor.",
 				"Sync tags align the code between threads and create visual connections.",
+				"Use emphasis for the line where something important happens. [em]",
+				"Use dim for code that does not run in this path. [dim]",
 				"",
 				"Monaco editors: familiar VS Code hotkeys and multi-cursor editing.",
 				"Persistent edit history includes thread changes.",

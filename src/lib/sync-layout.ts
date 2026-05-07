@@ -1,5 +1,7 @@
 import type {
 	MatchedSyncGroupsResult,
+	LineStyleDecoration,
+	LineStyleTagKind,
 	SyncGroup,
 	SyncGroupOccurrence,
 	SyncLineDecoration,
@@ -12,7 +14,13 @@ import type {
 	ZonePlan,
 } from "./thread-visualizer-types";
 
-export const SYNC_PATTERN = /\[(sync|wait|set)\s+([^\]]+?)\]/gi;
+export const SYNC_PATTERN = /\[(sync|wait|set)\s+([^\]\s]+)\s*\]/gi;
+export const LINE_STYLE_TAG_PATTERN = /\[(em|dim)\]/gi;
+
+type LineStyleDecorations = {
+	tags: LineStyleDecoration[];
+	text: LineStyleDecoration[];
+};
 
 type SyncOccurrence = {
 	id: string;
@@ -105,6 +113,119 @@ export function collectSyncTagDecorations(text: string): SyncTagDecoration[] {
 	});
 
 	return decorations;
+}
+
+export function collectLineStyleDecorations(text: string): LineStyleDecorations {
+	const lines = text.split(/\r?\n/);
+	const tags: LineStyleDecoration[] = [];
+	const styledLines = new Map<number, LineStyleTagKind>();
+
+	lines.forEach((line, index) => {
+		const codeSegment = getLineCodeSegment(line);
+		const matcher = new RegExp(LINE_STYLE_TAG_PATTERN.source, LINE_STYLE_TAG_PATTERN.flags);
+		let match: RegExpExecArray | null = null;
+
+		while ((match = matcher.exec(codeSegment)) !== null) {
+			const kind = match[1].toLowerCase() as LineStyleTagKind;
+			const lineNumber = index + 1;
+			if (!styledLines.has(lineNumber)) {
+				styledLines.set(lineNumber, kind);
+			}
+
+			tags.push({
+				kind,
+				lineNumber,
+				startColumn: match.index + 1,
+				endColumn: match.index + match[0].length + 1,
+			});
+		}
+	});
+
+	return {
+		tags,
+		text: collectLineStyleTextDecorations(lines, styledLines),
+	};
+}
+
+function collectLineStyleTextDecorations(
+	lines: string[],
+	styledLines: Map<number, LineStyleTagKind>
+): LineStyleDecoration[] {
+	const decorations: LineStyleDecoration[] = [];
+
+	for (const [lineNumber, kind] of styledLines) {
+		const line = lines[lineNumber - 1] ?? "";
+		const codeSegment = getLineCodeSegment(line);
+		const excludedRanges = [
+			...collectKnownTagRanges(codeSegment, LINE_STYLE_TAG_PATTERN),
+			...collectKnownTagRanges(codeSegment, SYNC_PATTERN),
+		].sort((a, b) => a.startColumn - b.startColumn);
+		let startColumn = 1;
+
+		for (const excludedRange of excludedRanges) {
+			pushNonEmptyLineStyleRange(
+				decorations,
+				line,
+				kind,
+				lineNumber,
+				startColumn,
+				excludedRange.startColumn
+			);
+			startColumn = Math.max(startColumn, excludedRange.endColumn);
+		}
+
+		pushNonEmptyLineStyleRange(
+			decorations,
+			line,
+			kind,
+			lineNumber,
+			startColumn,
+			line.length + 1
+		);
+	}
+
+	return decorations;
+}
+
+function collectKnownTagRanges(
+	line: string,
+	pattern: RegExp
+): Array<{ startColumn: number; endColumn: number }> {
+	const ranges: Array<{ startColumn: number; endColumn: number }> = [];
+	const matcher = new RegExp(pattern.source, pattern.flags);
+	let match: RegExpExecArray | null = null;
+
+	while ((match = matcher.exec(line)) !== null) {
+		ranges.push({
+			startColumn: match.index + 1,
+			endColumn: match.index + match[0].length + 1,
+		});
+	}
+
+	return ranges;
+}
+
+function pushNonEmptyLineStyleRange(
+	decorations: LineStyleDecoration[],
+	line: string,
+	kind: LineStyleTagKind,
+	lineNumber: number,
+	startColumn: number,
+	endColumn: number
+): void {
+	if (
+		endColumn <= startColumn ||
+		line.slice(startColumn - 1, endColumn - 1).trim().length === 0
+	) {
+		return;
+	}
+
+	decorations.push({
+		kind,
+		lineNumber,
+		startColumn,
+		endColumn,
+	});
 }
 
 export function collectLineCommentDecorations(text: string): Array<{
