@@ -54,6 +54,10 @@ const syncDecorationStyles = css`
 		text-underline-offset: 2px;
 	}
 
+	:global(.monaco-editor .sync-inline-tag--ignored) {
+		opacity: 0.6;
+	}
+
 	:global(.monaco-editor .line-style-tag) {
 		color: color-mix(in srgb, currentColor 60%, white);
 		opacity: 0.8;
@@ -63,7 +67,7 @@ const syncDecorationStyles = css`
 		font-weight: bold;
 	}
 
-	:global(.monaco-editor .line-style-text--dim) {
+	:global(.monaco-editor .line-style-text--skip) {
 		color: color-mix(in srgb, currentColor 40%, white);
 	}
 

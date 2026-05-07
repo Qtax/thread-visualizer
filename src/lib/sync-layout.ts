@@ -15,7 +15,7 @@ import type {
 } from "./thread-visualizer-types";
 
 export const SYNC_PATTERN = /\[(sync|wait|set)\s+([^\]\s]+)\s*\]/gi;
-export const LINE_STYLE_TAG_PATTERN = /\[(em|dim)\]/gi;
+export const LINE_STYLE_TAG_PATTERN = /\[(em|skip)\]/gi;
 
 type LineStyleDecorations = {
 	tags: LineStyleDecoration[];
@@ -36,6 +36,10 @@ function getLineCodeSegment(line: string): string {
 	return commentStart === -1 ? line : line.slice(0, commentStart);
 }
 
+function hasSkipTag(line: string): boolean {
+	return /\[skip\]/i.test(line);
+}
+
 function parseFirstSyncs(text: string): SyncOccurrence[] {
 	const seen = new Set<string>();
 	const lines = text.split(/\r?\n/);
@@ -43,6 +47,10 @@ function parseFirstSyncs(text: string): SyncOccurrence[] {
 
 	for (let index = 0; index < lines.length; index += 1) {
 		const line = getLineCodeSegment(lines[index]);
+		if (hasSkipTag(line)) {
+			continue;
+		}
+
 		const matcher = new RegExp(SYNC_PATTERN);
 		let match: RegExpExecArray | null = null;
 
@@ -66,6 +74,10 @@ export function collectSyncMarkers(text: string): SyncMarker[] {
 
 	lines.forEach((line, index) => {
 		const codeSegment = getLineCodeSegment(line);
+		if (hasSkipTag(codeSegment)) {
+			return;
+		}
+
 		const matcher = new RegExp(SYNC_PATTERN.source, SYNC_PATTERN.flags);
 		let match: RegExpExecArray | null = null;
 
@@ -92,6 +104,7 @@ export function collectSyncTagDecorations(text: string): SyncTagDecoration[] {
 
 	lines.forEach((line, index) => {
 		const codeSegment = getLineCodeSegment(line);
+		const ignored = hasSkipTag(codeSegment);
 		const matcher = new RegExp(SYNC_PATTERN.source, SYNC_PATTERN.flags);
 		let match: RegExpExecArray | null = null;
 
@@ -108,6 +121,7 @@ export function collectSyncTagDecorations(text: string): SyncTagDecoration[] {
 				lineNumber: index + 1,
 				startColumn: match.index + 1,
 				endColumn: match.index + fullMatch.length + 1,
+				ignored,
 			});
 		}
 	});
@@ -128,7 +142,7 @@ export function collectLineStyleDecorations(text: string): LineStyleDecorations 
 		while ((match = matcher.exec(codeSegment)) !== null) {
 			const kind = match[1].toLowerCase() as LineStyleTagKind;
 			const lineNumber = index + 1;
-			if (!styledLines.has(lineNumber)) {
+			if (kind === "skip" || !styledLines.has(lineNumber)) {
 				styledLines.set(lineNumber, kind);
 			}
 

@@ -369,30 +369,36 @@ export function useThreadEditors(
 					className: getSyncDecorationClassName(kind),
 				},
 			})),
-			...inlineTagDecorations.map(({ id, kind, lineNumber, startColumn, endColumn }) => {
-				const isCyclic = cyclicIds.has(id);
-				const markerKey = `${threadId}:${lineNumber}:${id}:${kind}`;
-				const markerErrorReason = markerErrors.get(markerKey);
-				const isError = isCyclic || markerErrorReason !== undefined;
-				const inlineClassName = isError
-					? `${getSyncInlineTagClassName(kind)} sync-inline-tag--error`
-					: getSyncInlineTagClassName(kind);
-				const hoverParts: string[] = [];
-				if (isCyclic) {
-					hoverParts.push(`Sync id "${id}" is part of a cycle, alignment disabled`);
+			...inlineTagDecorations.map(
+				({ id, kind, lineNumber, startColumn, endColumn, ignored }) => {
+					const isCyclic = cyclicIds.has(id);
+					const markerKey = `${threadId}:${lineNumber}:${id}:${kind}`;
+					const markerErrorReason = markerErrors.get(markerKey);
+					const isError = !ignored && (isCyclic || markerErrorReason !== undefined);
+					const inlineClassName = ignored
+						? `${getSyncInlineTagClassName(kind)} sync-inline-tag--ignored`
+						: isError
+							? `${getSyncInlineTagClassName(kind)} sync-inline-tag--error`
+							: getSyncInlineTagClassName(kind);
+					const hoverParts: string[] = [];
+					if (!ignored && isCyclic) {
+						hoverParts.push(`Sync id "${id}" is part of a cycle, alignment disabled`);
+					}
+					if (!ignored && markerErrorReason !== undefined) {
+						hoverParts.push(markerErrorReason);
+					}
+					return {
+						range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
+						options: {
+							inlineClassName,
+							hoverMessage:
+								hoverParts.length > 0
+									? { value: hoverParts.join("\n\n") }
+									: undefined,
+						},
+					};
 				}
-				if (markerErrorReason !== undefined) {
-					hoverParts.push(markerErrorReason);
-				}
-				return {
-					range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
-					options: {
-						inlineClassName,
-						hoverMessage:
-							hoverParts.length > 0 ? { value: hoverParts.join("\n\n") } : undefined,
-					},
-				};
-			}),
+			),
 			...lineStyleDecorations.tags.map(({ kind, lineNumber, startColumn, endColumn }) => ({
 				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
 				options: {

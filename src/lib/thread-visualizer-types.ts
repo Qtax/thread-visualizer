@@ -6,7 +6,7 @@ export type Thread = {
 
 export type SyncTagKind = "sync" | "wait" | "set";
 
-export type LineStyleTagKind = "em" | "dim";
+export type LineStyleTagKind = "em" | "skip";
 
 export type SyncLineDecoration = {
 	kind: SyncTagKind;
@@ -25,6 +25,7 @@ export type SyncTagDecoration = {
 	lineNumber: number;
 	startColumn: number;
 	endColumn: number;
+	ignored: boolean;
 };
 
 export type LineStyleDecoration = {
