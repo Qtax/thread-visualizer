@@ -137,6 +137,9 @@ function createPointerDownCursorPrepositioner(
 		}
 
 		activatePointerMode();
+		if (event.shiftKey) {
+			return;
+		}
 
 		const target = editor.getTargetAtClientPoint(event.clientX, event.clientY);
 		if (!target?.position || !hasCursorPosition(target)) {
