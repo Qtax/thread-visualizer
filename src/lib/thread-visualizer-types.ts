@@ -35,6 +35,12 @@ export type LineStyleDecoration = {
 	endColumn: number;
 };
 
+export type HorizontalRuleLineDecoration = {
+	lineNumber: number;
+	startColumn: number;
+	endColumn: number;
+};
+
 export type SyncMarkerErrorReason =
 	| "wait-without-set"
 	| "set-without-wait"
@@ -84,10 +90,16 @@ export type ConnectorPath = {
 	variant: "dependency" | "sync";
 };
 
+export type HorizontalRuleLine = {
+	key: string;
+	y: number;
+};
+
 export type ConnectorOverlay = {
 	width: number;
 	height: number;
 	connectors: ConnectorPath[];
+	horizontalRules: HorizontalRuleLine[];
 };
 
 /** A workspace is a named collection of threads with its own undo history. */

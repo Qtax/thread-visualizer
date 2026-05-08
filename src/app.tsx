@@ -63,6 +63,10 @@ const syncDecorationStyles = css`
 		opacity: 0.8;
 	}
 
+	:global(.monaco-editor .line-style-tag--hr) {
+		font-weight: bold;
+	}
+
 	:global(.monaco-editor .line-style-text--em) {
 		font-weight: bold;
 	}

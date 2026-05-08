@@ -2,6 +2,7 @@ import type {
 	MatchedSyncGroupsResult,
 	LineStyleDecoration,
 	LineStyleTagKind,
+	HorizontalRuleLineDecoration,
 	SyncGroup,
 	SyncGroupOccurrence,
 	SyncLineDecoration,
@@ -16,6 +17,7 @@ import type {
 
 export const SYNC_PATTERN = /\[(sync|wait|set)\s+([^\]\s]+)\s*\]/gi;
 export const LINE_STYLE_TAG_PATTERN = /\[(em|skip)\]/gi;
+export const HORIZONTAL_RULE_TAG_PATTERN = /\[hr\]/gi;
 
 type LineStyleDecorations = {
 	tags: LineStyleDecoration[];
@@ -161,6 +163,30 @@ export function collectLineStyleDecorations(text: string): LineStyleDecorations 
 	};
 }
 
+export function collectHorizontalRuleLineDecorations(text: string): HorizontalRuleLineDecoration[] {
+	const lines = text.split(/\r?\n/);
+	const decorations: HorizontalRuleLineDecoration[] = [];
+
+	lines.forEach((line, index) => {
+		const codeSegment = getLineCodeSegment(line);
+		const matcher = new RegExp(
+			HORIZONTAL_RULE_TAG_PATTERN.source,
+			HORIZONTAL_RULE_TAG_PATTERN.flags
+		);
+		let match: RegExpExecArray | null = null;
+
+		while ((match = matcher.exec(codeSegment)) !== null) {
+			decorations.push({
+				lineNumber: index + 1,
+				startColumn: match.index + 1,
+				endColumn: match.index + match[0].length + 1,
+			});
+		}
+	});
+
+	return decorations;
+}
+
 function collectLineStyleTextDecorations(
 	lines: string[],
 	styledLines: Map<number, LineStyleTagKind>
@@ -173,6 +199,7 @@ function collectLineStyleTextDecorations(
 		const excludedRanges = [
 			...collectKnownTagRanges(codeSegment, LINE_STYLE_TAG_PATTERN),
 			...collectKnownTagRanges(codeSegment, SYNC_PATTERN),
+			...collectKnownTagRanges(codeSegment, HORIZONTAL_RULE_TAG_PATTERN),
 		].sort((a, b) => a.startColumn - b.startColumn);
 		let startColumn = 1;
 

@@ -4,6 +4,7 @@ export const EMPTY_CONNECTOR_OVERLAY: ConnectorOverlay = {
 	width: 0,
 	height: 0,
 	connectors: [],
+	horizontalRules: [],
 };
 
 function buildArrowHead(point: Point, angle: number): { arrowPath: string; shaftEnd: Point } {
@@ -99,12 +100,13 @@ export function connectorOverlayEquals(left: ConnectorOverlay, right: ConnectorO
 	if (
 		left.width !== right.width ||
 		left.height !== right.height ||
-		left.connectors.length !== right.connectors.length
+		left.connectors.length !== right.connectors.length ||
+		left.horizontalRules.length !== right.horizontalRules.length
 	) {
 		return false;
 	}
 
-	return left.connectors.every((connector, index) => {
+	const connectorsEqual = left.connectors.every((connector, index) => {
 		const next = right.connectors[index];
 		return (
 			connector.id === next.id &&
@@ -114,4 +116,10 @@ export function connectorOverlayEquals(left: ConnectorOverlay, right: ConnectorO
 			connector.arrowPath === next.arrowPath
 		);
 	});
+	const horizontalRulesEqual = left.horizontalRules.every((horizontalRule, index) => {
+		const next = right.horizontalRules[index];
+		return horizontalRule.key === next.key && horizontalRule.y === next.y;
+	});
+
+	return connectorsEqual && horizontalRulesEqual;
 }

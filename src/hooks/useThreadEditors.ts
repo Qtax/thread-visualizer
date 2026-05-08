@@ -15,6 +15,7 @@ import {
 } from "../lib/connector-geometry";
 import {
 	collectLineStyleDecorations,
+	collectHorizontalRuleLineDecorations,
 	collectMatchedSyncGroups,
 	collectLineCommentDecorations,
 	collectSyncLineDecorations,
@@ -40,6 +41,7 @@ import type {
 	Thread,
 	ZonePlan,
 } from "../lib/thread-visualizer-types";
+import { HORIZONTAL_LINE_STROKE_WIDTH } from "../components/ConnectorOverlay";
 
 const MIN_EDITOR_HEIGHT = 180;
 const DEFAULT_EDITOR_FONT_SIZE = 14;
@@ -374,6 +376,7 @@ export function useThreadEditors(
 		const lineDecorations = collectSyncLineDecorations(code);
 		const inlineTagDecorations = collectSyncTagDecorations(code);
 		const lineStyleDecorations = collectLineStyleDecorations(code);
+		const horizontalRuleLineDecorations = collectHorizontalRuleLineDecorations(code);
 		const commentDecorations = collectLineCommentDecorations(code);
 		collection.set([
 			...lineDecorations.map(({ kind, lineNumber }) => ({
@@ -426,6 +429,12 @@ export function useThreadEditors(
 					stickiness: monaco.editor.TrackedRangeStickiness.AlwaysGrowsWhenTypingAtEdges,
 				},
 			})),
+			...horizontalRuleLineDecorations.map(({ lineNumber, startColumn, endColumn }) => ({
+				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
+				options: {
+					inlineClassName: "line-style-tag line-style-tag--hr",
+				},
+			})),
 			...commentDecorations.map(({ lineNumber, startColumn, endColumn }) => ({
 				range: new monaco.Range(lineNumber, startColumn, lineNumber, endColumn),
 				options: {
@@ -451,6 +460,7 @@ export function useThreadEditors(
 		const canvasRect = canvas.getBoundingClientRect();
 		const groups = new Map<string, { set: ConnectorEndpoint[]; wait: ConnectorEndpoint[] }>();
 		const syncGroups = new Map<string, ConnectorEndpoint[]>();
+		const horizontalRules: ConnectorOverlay["horizontalRules"] = [];
 
 		threads.forEach((thread) => {
 			const editor = editorsRef.current[thread.id];
@@ -463,6 +473,27 @@ export function useThreadEditors(
 			const leftX = editorRect.left - canvasRect.left + 10;
 			const rightX = editorRect.right - canvasRect.left - 10;
 			const centerX = editorRect.left - canvasRect.left + editorRect.width / 2;
+			const seenHorizontalRuleLineNumbers = new Set<number>();
+			collectHorizontalRuleLineDecorations(thread.code).forEach(({ lineNumber }) => {
+				if (seenHorizontalRuleLineNumbers.has(lineNumber)) {
+					return;
+				}
+				seenHorizontalRuleLineNumbers.add(lineNumber);
+
+				const linePosition = editor.getScrolledVisiblePosition({ lineNumber, column: 1 });
+				if (!linePosition) {
+					return;
+				}
+
+				horizontalRules.push({
+					key: `${thread.id}:${lineNumber}`,
+					y:
+						editorRect.top -
+						canvasRect.top +
+						linePosition.top +
+						HORIZONTAL_LINE_STROKE_WIDTH / 2,
+				});
+			});
 
 			const seenSyncIds = new Set<string>();
 			collectSyncMarkers(thread.code).forEach(({ id, kind, lineNumber }) => {
@@ -656,6 +687,7 @@ export function useThreadEditors(
 			),
 			height: Math.max(canvas.offsetHeight, 1),
 			connectors,
+			horizontalRules,
 		};
 
 		setConnectorOverlay((current) =>
@@ -755,6 +787,7 @@ export function useThreadEditors(
 		if (planUnchanged && cyclicUnchanged) {
 			// Refresh decorations (cheap, idempotent) but skip view-zone work.
 			threads.forEach((thread) => applySyncDecorations(thread.id, thread.code));
+			requestAnimationFrame(() => updateConnectorOverlay());
 			isApplyingZonesRef.current = false;
 			if (pendingApplyViewZonesRef.current) {
 				pendingApplyViewZonesRef.current = false;
