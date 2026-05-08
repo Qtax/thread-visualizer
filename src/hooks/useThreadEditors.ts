@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type MutableRefObject,
+} from "react";
 import type * as Monaco from "monaco-editor";
 
 import {
@@ -191,7 +198,8 @@ type UseThreadEditorsResult = {
 
 export function useThreadEditors(
 	threads: Thread[],
-	pushUndoSnapshot?: (cursorOverrides?: Record<string, CursorPosition>) => void
+	pushUndoSnapshot?: (cursorOverrides?: Record<string, CursorPosition>) => void,
+	isRestoringRef?: MutableRefObject<boolean>
 ): UseThreadEditorsResult {
 	const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
 	const [connectorOverlay, setConnectorOverlay] =
@@ -238,18 +246,24 @@ export function useThreadEditors(
 		return positions;
 	}, []);
 
-	const applyCursors = useCallback((cursors: Record<string, CursorPosition>) => {
-		for (const [threadId, position] of Object.entries(cursors)) {
-			const editor = editorsRef.current[threadId];
-			if (!editor) continue;
-			const model = editor.getModel();
-			if (!model) continue;
-			const clamped = model.validatePosition(position);
-			editor.setPosition(clamped);
-			editor.revealPositionInCenterIfOutsideViewport(clamped);
-			revealPositionInWindow(editor, clamped);
-		}
-	}, []);
+	const applyCursors = useCallback(
+		(cursors: Record<string, CursorPosition>) => {
+			for (const [threadId, position] of Object.entries(cursors)) {
+				const editor = editorsRef.current[threadId];
+				if (!editor) continue;
+				const model = editor.getModel();
+				if (!model) continue;
+				const clamped = model.validatePosition(position);
+				editor.setPosition(clamped);
+
+				if (!isRestoringRef?.current) {
+					editor.revealPositionInCenterIfOutsideViewport(clamped);
+					revealPositionInWindow(editor, clamped);
+				}
+			}
+		},
+		[isRestoringRef]
+	);
 
 	const focusEditor = useCallback((threadId: string) => {
 		editorsRef.current[threadId]?.focus();
@@ -990,7 +1004,7 @@ export function useThreadEditors(
 				});
 
 				editor.onDidChangeCursorPosition((event) => {
-					if (!isPointerCursorChange) {
+					if (!isPointerCursorChange && !isRestoringRef?.current) {
 						revealPositionInWindow(editor, event.position);
 					}
 				});

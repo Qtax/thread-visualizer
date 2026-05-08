@@ -54,6 +54,7 @@ type UseWorkspaceManagerResult = {
 	canUndo: boolean;
 	canRedo: boolean;
 	cursorAdapterRef: React.MutableRefObject<CursorAdapter | null>;
+	isRestoringRef: React.MutableRefObject<boolean>;
 
 	// Import/export
 	fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -122,6 +123,12 @@ function applyRestoredCursors(
 		return;
 	}
 
+	// Focus the first changed editor so the user's attention follows the change.
+	const firstChanged = changedThreadIds.values().next().value;
+	if (firstChanged) {
+		adapter.focusEditor(firstChanged);
+	}
+
 	if (cursors) {
 		const filtered: Record<string, CursorPosition> = {};
 		for (const id of changedThreadIds) {
@@ -130,12 +137,6 @@ function applyRestoredCursors(
 			}
 		}
 		adapter.applyCursors(filtered);
-	}
-
-	// Focus the first changed editor so the user's attention follows the change.
-	const firstChanged = changedThreadIds.values().next().value;
-	if (firstChanged) {
-		adapter.focusEditor(firstChanged);
 	}
 }
 
@@ -386,8 +387,10 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		});
 
 		requestAnimationFrame(() => {
-			isRestoringRef.current = false;
 			applyRestoredCursors(cursorAdapterRef.current, targetCursors, changedThreadIds);
+			requestAnimationFrame(() => {
+				isRestoringRef.current = false;
+			});
 		});
 	}, [updateActiveWorkspace]);
 
@@ -422,8 +425,10 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		});
 
 		requestAnimationFrame(() => {
-			isRestoringRef.current = false;
 			applyRestoredCursors(cursorAdapterRef.current, targetCursors, changedThreadIds);
+			requestAnimationFrame(() => {
+				isRestoringRef.current = false;
+			});
 		});
 	}, [updateActiveWorkspace]);
 
@@ -777,6 +782,7 @@ export function useWorkspaceManager(): UseWorkspaceManagerResult {
 		canUndo,
 		canRedo,
 		cursorAdapterRef,
+		isRestoringRef,
 
 		fileInputRef,
 		importState,
